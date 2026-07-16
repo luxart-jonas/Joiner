@@ -234,6 +234,7 @@
       </div>
       <button id="addPhotosBtn" class="btn btn-gold">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <button id="addFolderBtn" class="btn btn-gold-outline" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
       <button id="relinkBtn" class="btn" title="Fehlende Bilder wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
       <button id="reassembleBtn" class="btn">⊞ In Block legen</button>
@@ -299,7 +300,7 @@
   const fileInput = document.getElementById('fileInput');
 
   let globalTilt = 0;
-  const state = { tiles: [], selectedIds: new Set() };
+  const state = { tiles: [], selectedIds: new Set(), dirHandles: [] };
   let boardScale = 1;
   let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
   let uid = 1;
@@ -919,16 +920,17 @@
     });
   }
 
-  async function addFilesCommon(items){ // items: [{file, handle}]
+  async function addFilesCommon(items){ // items: [{file, handle, dirId, relPath}]
     const usable = items.filter(it => it.file && it.file.type.startsWith('image/'));
     if (!usable.length) return;
     const newTiles = [];
-    for (const { file, handle } of usable){
+    for (const { file, handle, dirId, relPath } of usable){
       const url = URL.createObjectURL(file);
       try {
         const dims = await loadImageDims(url);
-        newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null, filename: file.name,
-                         naturalW: dims.w, naturalH: dims.h,
+        newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null,
+                         dirId: dirId != null ? dirId : null, relPath: relPath || null,
+                         filename: file.name, naturalW: dims.w, naturalH: dims.h,
                          x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false });
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
@@ -967,6 +969,76 @@
     }
     await addFilesCommon(items);
   }
+
+  // ---------- Whole-folder linking ----------
+  // Links an entire folder (e.g. "Azoren") at once — one permission grant covers every
+  // photo inside, instead of asking per file. This is the recommended way to add many
+  // photos, and it's what makes reconnecting 40 photos later a single click, not 40.
+  const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|heic|heif|tiff?|bmp|avif)$/i;
+
+  async function scanImagesInDirectory(dirHandle, maxDepth){
+    const found = [];
+    async function walk(handle, depth, prefix){
+      for await (const entry of handle.values()){
+        if (entry.kind === 'file'){
+          if (IMAGE_EXT_RE.test(entry.name)) found.push({ name: prefix + entry.name, fileHandle: entry });
+        } else if (entry.kind === 'directory' && depth < maxDepth){
+          await walk(entry, depth + 1, prefix + entry.name + '/');
+        }
+      }
+    }
+    await walk(dirHandle, 0, '');
+    return found;
+  }
+
+  async function resolveFileInDir(dirHandle, relPath){
+    const parts = relPath.split('/');
+    let cur = dirHandle;
+    for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i]);
+    const fileHandle = await cur.getFileHandle(parts[parts.length - 1]);
+    return { fileHandle, file: await fileHandle.getFile() };
+  }
+
+  function registerDirHandle(handle, name){
+    const id = 'd' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    state.dirHandles.push({ id, handle, name });
+    return id;
+  }
+
+  function usedDirHandles(){
+    const ids = new Set(state.tiles.map(t => t.dirId).filter(x => x != null));
+    return state.dirHandles.filter(d => ids.has(d.id));
+  }
+
+  const addFolderBtn = document.getElementById('addFolderBtn');
+  addFolderBtn.addEventListener('click', async () => {
+    if (!window.showDirectoryPicker){
+      alert('Ordner-Verknüpfung braucht die Dateisystem-Funktionen von aktuellem Chrome — in diesem Browser nicht verfügbar. Nutze stattdessen "＋ Fotos".');
+      return;
+    }
+    let dirHandle;
+    try { dirHandle = await window.showDirectoryPicker(); }
+    catch(err){ return; } // cancelled
+    addFolderBtn.textContent = 'Durchsuche…';
+    addFolderBtn.disabled = true;
+    try {
+      const found = await scanImagesInDirectory(dirHandle, 2);
+      if (!found.length){
+        alert('Keine Bilder in „' + dirHandle.name + '“ gefunden (durchsucht bis 2 Unterordner tief).');
+        return;
+      }
+      const dirId = registerDirHandle(dirHandle, dirHandle.name);
+      const items = [];
+      for (const f of found){
+        try { items.push({ file: await f.fileHandle.getFile(), handle: f.fileHandle, dirId, relPath: f.name }); }
+        catch(err){ console.warn(err); }
+      }
+      await addFilesCommon(items);
+    } finally {
+      addFolderBtn.textContent = '📁 Ordner';
+      addFolderBtn.disabled = false;
+    }
+  });
 
   const addPhotosBtn = document.getElementById('addPhotosBtn');
   addPhotosBtn.addEventListener('click', async () => {
@@ -1157,8 +1229,10 @@
       // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
       // handle when available, otherwise just the filename), never a copy of the pixels.
       // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
+      dirHandles: usedDirHandles(),
       tiles: state.tiles.map(t => ({
-        id: t.id, filename: t.filename || (t.blob && t.blob.name) || null, handle: t.handle || null,
+        id: t.id, filename: t.filename || (t.blob && t.blob.name) || null,
+        handle: t.handle || null, dirId: t.dirId != null ? t.dirId : null, relPath: t.relPath || null,
         x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
         naturalW:t.naturalW, naturalH:t.naturalH
       }))
@@ -1190,11 +1264,29 @@
     db.close();
     if (!record) return false;
 
+    // one permission check per directory (not per photo) — this is what keeps
+    // reconnecting e.g. 40 photos from the same trip folder down to a single prompt
+    const dirGrant = new Map(); // dirId -> handle-if-granted-or-null
+    for (const d of (record.dirHandles || [])){
+      try {
+        let perm = await d.handle.queryPermission({ mode: 'read' });
+        if (perm !== 'granted') perm = await d.handle.requestPermission({ mode: 'read' });
+        dirGrant.set(d.id, perm === 'granted' ? d.handle : null);
+      } catch(err){ dirGrant.set(d.id, null); }
+    }
+    state.dirHandles = (record.dirHandles || []).filter(d => dirGrant.get(d.id));
+
     const tiles = [];
     for (const r of record.tiles){
       let blob = r.blob || null; // old-style saves from before lean storage still work directly
       let broken = false;
-      if (!blob && r.handle){
+      if (!blob && r.dirId != null && dirGrant.get(r.dirId) && r.relPath){
+        try {
+          const resolved = await resolveFileInDir(dirGrant.get(r.dirId), r.relPath);
+          blob = resolved.file;
+          r.handle = resolved.fileHandle; // keep for relink/backup convenience
+        } catch(err){ broken = true; }
+      } else if (!blob && r.handle){
         try {
           let perm = await r.handle.queryPermission({ mode: 'read' });
           if (perm !== 'granted') perm = await r.handle.requestPermission({ mode: 'read' });
@@ -1202,10 +1294,11 @@
           else broken = true;
         } catch(err){ broken = true; }
       } else if (!blob){
-        broken = true; // no embedded copy and no handle — needs a manual relink
+        broken = true; // no embedded copy and no way to relocate it — needs a manual relink
       }
       tiles.push({
         id: r.id, url: blob ? URL.createObjectURL(blob) : '', blob, handle: r.handle || null,
+        dirId: r.dirId != null ? r.dirId : null, relPath: r.relPath || null,
         filename: r.filename || (blob && blob.name) || null, broken,
         naturalW: r.naturalW, naturalH: r.naturalH,
         x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
@@ -1247,6 +1340,74 @@
     if (record){ record.folder = folder; store.put(record); }
     await txDone(tx);
     db.close();
+  }
+
+  // Writes out any embedded (old-style) photos in a project as real files in a folder
+  // of your choice, then re-saves the project as a lean, folder-linked one — removing
+  // the duplicate copy from the browser's database. Existing files with the same name
+  // in that folder are reused instead of overwritten, so running this twice is safe.
+  async function unpackProjectToFolder(project){
+    if (!window.showDirectoryPicker){
+      alert('Diese Funktion braucht die Dateisystem-Funktionen von aktuellem Chrome.');
+      return;
+    }
+    const heavyCount = project.tiles.filter(t => t.blob).length;
+    if (!confirm('„' + project.name + '“ entpacken?\n\n' + heavyCount + ' eingebettete(s) Foto(s) werden als echte Dateien in einen Ordner deiner Wahl geschrieben. Danach wird die doppelte Kopie aus der Datenbank gelöscht — das Projekt selbst bleibt erhalten.')) return;
+
+    let dirHandle;
+    try { dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); }
+    catch(err){ return; } // cancelled
+
+    setBackupStatus('Entpacke „' + project.name + '“…');
+    try {
+      const dirId = registerDirHandle(dirHandle, dirHandle.name);
+      const newTiles = [];
+      for (let i = 0; i < project.tiles.length; i++){
+        const t = project.tiles[i];
+        if (!t.blob){
+          // already lean (linked elsewhere) — leave exactly as is
+          newTiles.push(t);
+          continue;
+        }
+        let filename = t.filename || (t.id + '.jpg');
+        // avoid overwriting an unrelated file with the same name
+        let finalName = filename;
+        let suffix = 1;
+        while (true){
+          try { await dirHandle.getFileHandle(finalName); }
+          catch(err){ break; } // doesn't exist yet — safe to use
+          const dot = filename.lastIndexOf('.');
+          finalName = dot === -1 ? (filename + '-' + (++suffix)) : (filename.slice(0,dot) + '-' + (++suffix) + filename.slice(dot));
+          if (suffix > 500) break; // safety valve
+        }
+        const fileHandle = await dirHandle.getFileHandle(finalName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(t.blob);
+        await writable.close();
+
+        newTiles.push({
+          id: t.id, filename: finalName, handle: null, dirId, relPath: finalName,
+          x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z, naturalW:t.naturalW, naturalH:t.naturalH
+        });
+        setBackupStatus('Entpacke „' + project.name + '“ — Foto ' + (i+1) + '/' + project.tiles.length);
+        await tick();
+      }
+
+      const db = await openDB();
+      const tx = db.transaction('projects', 'readwrite');
+      tx.objectStore('projects').put({
+        id: project.id, name: project.name, folder: project.folder || '', savedAt: project.savedAt,
+        color: project.color, dirHandles: [{ id: dirId, handle: dirHandle, name: dirHandle.name }],
+        tiles: newTiles
+      });
+      await txDone(tx);
+      db.close();
+      setBackupStatus('✓ „' + project.name + '“ entpackt — keine doppelte Kopie mehr.');
+    } catch(err){
+      console.error(err);
+      alert('Entpacken fehlgeschlagen: ' + err.message);
+      setBackupStatus('');
+    }
   }
 
   let lastUsedFolder = '';
@@ -1314,11 +1475,24 @@
       const meta = document.createElement('div');
       meta.className = 'project-meta';
       const count = p.tiles.length;
-      meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos');
+      const isHeavy = p.tiles.some(t => t.blob);
+      meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos') + (isHeavy ? ' · eingebettet (doppelt)' : '');
       info.appendChild(title); info.appendChild(meta);
 
       const actions = document.createElement('div');
       actions.className = 'project-actions';
+
+      if (isHeavy){
+        const unpackBtnEl = document.createElement('button');
+        unpackBtnEl.className = 'btn btn-gold-outline';
+        unpackBtnEl.textContent = '🧹 Entpacken';
+        unpackBtnEl.title = 'Eingebettete Fotos als echte Dateien in einen Ordner deiner Wahl schreiben und die doppelte Kopie aus der Datenbank entfernen';
+        unpackBtnEl.addEventListener('click', async () => {
+          await unpackProjectToFolder(p);
+          openLoadModal();
+        });
+        actions.appendChild(unpackBtnEl);
+      }
 
       const folderBtnEl = document.createElement('button');
       folderBtnEl.className = 'btn btn-ghost';
@@ -1432,11 +1606,25 @@
         if (pi > 0) await writable.write(',');
         await writable.write('{"name":' + JSON.stringify(p.name) + ',"savedAt":' + (p.savedAt||0) + ',"color":' + JSON.stringify(p.color||null) + ',"tiles":[');
         const tiles = p.tiles || [];
+
+        // one permission check per directory this project uses (not per photo)
+        const dirGrant = new Map();
+        for (const d of (p.dirHandles || [])){
+          try {
+            let perm = await d.handle.queryPermission({ mode: 'read' });
+            if (perm !== 'granted') perm = await d.handle.requestPermission({ mode: 'read' });
+            dirGrant.set(d.id, perm === 'granted' ? d.handle : null);
+          } catch(err){ dirGrant.set(d.id, null); }
+        }
+
         let written = 0;
         for (let ti = 0; ti < tiles.length; ti++){
           const t = tiles[ti];
           let blob = t.blob || null; // old-style saves already carry the actual photo
-          if (!blob && t.handle){
+          if (!blob && t.dirId != null && dirGrant.get(t.dirId) && t.relPath){
+            try { blob = (await resolveFileInDir(dirGrant.get(t.dirId), t.relPath)).file; }
+            catch(err){ /* handled below as skipped */ }
+          } else if (!blob && t.handle){
             try {
               let perm = await t.handle.queryPermission({ mode: 'read' });
               if (perm !== 'granted') perm = await t.handle.requestPermission({ mode: 'read' });
