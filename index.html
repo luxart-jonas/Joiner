@@ -266,10 +266,9 @@
       <button id="addPhotosBtn" class="btn btn-gold">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
       <button id="addFolderBtn" class="btn btn-gold-outline" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
-      <button id="relinkBtn" class="btn" title="Fehlende Bilder wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
+      <button id="newCollageBtn" class="btn btn-gold-outline">+ Neue Collage</button>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
-      <button id="reassembleBtn" class="btn">⊞ In Block legen</button>
-      <button id="saveBtn" class="btn">💾 Speichern</button>
+      <button id="saveBtn" class="btn">💾 Save</button>
       <span id="currentProjectLabel" class="current-project-label"></span>
       <button id="loadBtn" class="btn">🗂️ Media</button>
 
@@ -288,7 +287,6 @@
           <button id="exportConfirmBtn" class="btn btn-gold">PNG exportieren</button>
         </div>
       </div>
-      <button id="clearBtn" class="btn btn-ghost">Zurücksetzen</button>
     </div>
   </header>
 
@@ -308,7 +306,6 @@
     <div class="modal-header">
       <h3>Media</h3>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button id="newCollageBtn" class="btn btn-gold" style="font-size:12.5px;padding:7px 11px;">+ Neue Collage</button>
         <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
         <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
       </div>
@@ -316,6 +313,7 @@
     <div class="media-dropzone" id="mediaDropzone">Ordner mit Fotos hierher ziehen, um sie als neues Projekt hinzuzufügen</div>
     <div class="modal-body" id="projectList"></div>
     <div class="modal-footer">
+      <button id="relinkBtn" class="btn" title="Fehlende Bilder der aktuell offenen Collage wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
       <button id="backupBtn" class="btn btn-gold-outline">⬇️ Alle sichern (Backup-Datei)</button>
       <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
       <button id="stripAllBtn" class="btn btn-ghost">🗑️ Alle doppelten Kopien entfernen</button>
@@ -446,26 +444,6 @@
     boardFrame.style.margin = marginY + 'px ' + marginX + 'px';
   }
 
-  // Lays every current photo out as a block — left to right, wrapping to a new row
-  // roughly every BLOCK_WRAP_WIDTH — in the order they were added (reading order),
-  // instead of one long strip. Keeps photos noticeably bigger on screen.
-  function layoutBlock(){
-    let x = 0, y = 0, rowH = 0;
-    state.tiles.forEach((t, i) => {
-      const scale = ROW_HEIGHT / t.naturalH;
-      const w = t.naturalW * scale, h = ROW_HEIGHT;
-      if (x > 0 && x + w > BLOCK_WRAP_WIDTH){
-        y += rowH + ROW_GAP;
-        x = 0; rowH = 0;
-      }
-      t.w = w; t.h = h; t.x = x; t.y = y; t.rot = 0; t.z = i + 1;
-      x += w + ROW_GAP;
-      rowH = Math.max(rowH, h);
-    });
-    maxZ = state.tiles.length;
-    blockCursor = { x, y, rowH };
-    viewZoom = 1;
-  }
 
   function render(){
     emptyHint.style.display = state.tiles.length ? 'none' : 'block';
@@ -1116,27 +1094,6 @@
   stage.addEventListener('drop', e => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-  });
-
-  // ---------- Row layout / Clear ----------
-  document.getElementById('reassembleBtn').addEventListener('click', () => {
-    if (!state.tiles.length) return;
-    layoutBlock();
-    render();
-  });
-
-
-  document.getElementById('clearBtn').addEventListener('click', () => {
-    if (!state.tiles.length) return;
-    if (!confirm('Alle Fotos entfernen?')) return;
-    state.tiles = [];
-    state.selectedIds = new Set();
-    maxZ = 0;
-    viewZoom = 1;
-    dragMode = 'move';
-    blockCursor = { x:0, y:0, rowH:0 };
-    updateModeBadge();
-    render();
   });
 
   // ---------- Export ----------
@@ -1822,10 +1779,6 @@
     const name = prompt('Name der neuen Collage:', defaultProjectName());
     if (name === null) return;
     const finalName = name.trim() || defaultProjectName();
-    const folder = prompt('Bin für diese Collage (optional, z. B. "Azoren") — leer lassen für „Ohne Bin“:', lastUsedFolder);
-    if (folder === null) return;
-    const finalFolder = folder.trim();
-    lastUsedFolder = finalFolder;
 
     state.tiles = [];
     state.selectedIds = new Set();
@@ -1839,10 +1792,9 @@
     state.currentProjectName = null;
     state.currentProjectFolder = null;
     state.pendingName = finalName;
-    state.pendingFolder = finalFolder;
+    state.pendingFolder = ''; // no bin yet — drag it into one from the Media panel whenever you like
     updateCurrentProjectLabel();
     render();
-    closeLoadModal();
   });
 
   document.getElementById('addBinBtn').addEventListener('click', async () => {
