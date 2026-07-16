@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Joiner — Fotocollagen</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#121214">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Joiner">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -270,6 +277,7 @@
       <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
       <input id="restoreInput" type="file" accept="application/json,.json" hidden>
     </div>
+    <p class="modal-empty" id="backupStatus" style="display:none;padding:0 18px 14px;text-align:left;"></p>
   </div>
 </div>
 
@@ -1212,23 +1220,37 @@
   loadModalOverlay.addEventListener('pointerdown', e => { if (e.target === loadModalOverlay) closeLoadModal(); });
 
   // ---------- Backup (export all projects to a file) / Restore ----------
-  function blobToDataURL(blob){
+  // Both directions stream photo-by-photo instead of holding everything in
+  // memory at once — a backup can be well over 1 GB, and loading that whole
+  // thing as one JS string/JSON tree is exactly what crashes the tab.
+  const backupStatus = document.getElementById('backupStatus');
+  function setBackupStatus(text){
+    backupStatus.style.display = text ? 'block' : 'none';
+    backupStatus.textContent = text || '';
+  }
+
+  // request persistent storage so Chrome doesn't evict this origin's IndexedDB under disk pressure
+  if (navigator.storage && navigator.storage.persist){
+    navigator.storage.persist().catch(() => {});
+  }
+
+  function blobToBase64(blob){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
+      reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(',') + 1));
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   }
 
-  function downloadFile(blob, filename){
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  function base64ToBlob(base64, mime){
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
   }
+
+  function tick(){ return new Promise(r => setTimeout(r, 0)); }
 
   async function exportAllProjectsBackup(){
     const db = await openDB();
@@ -1241,61 +1263,180 @@
     db.close();
     if (!records.length){ alert('Noch keine gespeicherten Collagen zum Sichern.'); return; }
 
-    const out = { app: 'joiner', version: 1, exportedAt: Date.now(), projects: [] };
-    for (const p of records){
-      const tiles = [];
-      for (const t of p.tiles){
-        const data = await blobToDataURL(t.blob);
-        tiles.push({
-          id: t.id, x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, z: t.z,
-          naturalW: t.naturalW, naturalH: t.naturalH,
-          filename: t.filename || (t.blob && t.blob.name) || null,
-          mime: t.blob ? t.blob.type : 'image/jpeg',
-          data
-        });
-      }
-      out.projects.push({ name: p.name, savedAt: p.savedAt, color: p.color, tiles });
-    }
-    const jsonBlob = new Blob([JSON.stringify(out)], { type: 'application/json' });
     const stamp = new Date().toISOString().slice(0,10);
-    downloadFile(jsonBlob, 'joiner-backup-' + stamp + '.json');
+    const suggestedName = 'joiner-backup-' + stamp + '.json';
+
+    if (!window.showSaveFilePicker){
+      alert('Dein Browser unterstützt kein direktes Schreiben auf die Festplatte (showSaveFilePicker fehlt). Bitte in aktuellem Chrome versuchen — in Safari/Firefox funktioniert das Backup bei großen Projekten evtl. nicht zuverlässig.');
+      return;
+    }
+    let fileHandle;
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+      });
+    } catch(err){ return; } // cancelled
+
+    const writable = await fileHandle.createWritable();
+    let skipped = 0;
+    try {
+      await writable.write('{"app":"joiner","version":1,"exportedAt":' + Date.now() + ',"projects":[');
+      for (let pi = 0; pi < records.length; pi++){
+        const p = records[pi];
+        if (pi > 0) await writable.write(',');
+        await writable.write('{"name":' + JSON.stringify(p.name) + ',"savedAt":' + (p.savedAt||0) + ',"color":' + JSON.stringify(p.color||null) + ',"tiles":[');
+        const tiles = p.tiles || [];
+        for (let ti = 0; ti < tiles.length; ti++){
+          const t = tiles[ti];
+          if (ti > 0) await writable.write(',');
+          const mime = t.blob ? t.blob.type : 'image/jpeg';
+          const filename = t.filename || (t.blob && t.blob.name) || null;
+          const meta = { id:t.id, x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
+                         naturalW:t.naturalW, naturalH:t.naturalH, filename, mime };
+          let base64 = '';
+          try { base64 = await blobToBase64(t.blob); }
+          catch(err){ skipped++; }
+          const metaStr = JSON.stringify(meta);
+          await writable.write(metaStr.slice(0, -1) + ',"data":"data:' + mime + ';base64,' + base64 + '"}');
+          setBackupStatus('Sichere „' + p.name + '“ — Foto ' + (ti+1) + '/' + tiles.length + ' (Projekt ' + (pi+1) + '/' + records.length + ')');
+          await tick();
+        }
+        await writable.write(']}');
+      }
+      await writable.write(']}');
+      await writable.close();
+      setBackupStatus('✓ Backup gespeichert.' + (skipped ? ' (' + skipped + ' Foto(s) übersprungen)' : ''));
+    } catch(err){
+      console.error(err);
+      try { await writable.close(); } catch(e2){}
+      setBackupStatus('');
+      throw err;
+    }
+  }
+
+  // ---------- streaming parser for the backup format above ----------
+  // Exploits the fixed key order we write with, so instead of a general JSON
+  // streaming parser we can match each object's header with a regex and then
+  // find the base64 payload's end via a plain substring search for `"}` —
+  // base64 never contains a quote or brace, so that's always safe.
+  const PROJECT_HEADER_RE = /^\{"name":((?:"(?:[^"\\]|\\.)*")|null),"savedAt":(-?\d+(?:\.\d+)?),"color":((?:"(?:[^"\\]|\\.)*")|null),"tiles":\[/;
+  const TILE_HEADER_RE = /^\{"id":"((?:[^"\\]|\\.)*)","x":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"y":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"w":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"h":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"rot":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"z":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalW":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalH":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"filename":((?:"(?:[^"\\]|\\.)*")|null),"mime":"((?:[^"\\]|\\.)*)","data":"data:([^;]*);base64,/;
+
+  async function* parseBackupStream(file){
+    const reader = file.stream().getReader();
+    const decoder = new TextDecoder();
+    let buf = '', eof = false;
+    async function more(){
+      if (eof) return false;
+      const { value, done } = await reader.read();
+      if (done){ eof = true; return false; }
+      buf += decoder.decode(value, { stream: true });
+      return true;
+    }
+    function consume(n){ buf = buf.slice(n); }
+
+    while (buf.indexOf('"projects":[') === -1){
+      if (!(await more())) throw new Error('Kein "projects"-Array gefunden — Datei beschädigt oder falsches Format.');
+    }
+    consume(buf.indexOf('"projects":[') + '"projects":['.length);
+
+    while (true){
+      while (true){
+        while (buf.length && /[\s,]/.test(buf[0])) consume(1);
+        if (buf.length) break;
+        if (!(await more())) break;
+      }
+      if (buf[0] === ']'){ consume(1); break; }
+
+      let headerMatch;
+      while (!(headerMatch = buf.match(PROJECT_HEADER_RE))){
+        if (!(await more())) throw new Error('Projekt-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
+      }
+      const name = JSON.parse(headerMatch[1]);
+      const savedAt = Number(headerMatch[2]);
+      const color = JSON.parse(headerMatch[3]);
+      consume(headerMatch[0].length);
+      yield { type: 'project-start', name, savedAt, color };
+
+      while (true){
+        while (true){
+          while (buf.length && /[\s,]/.test(buf[0])) consume(1);
+          if (buf.length) break;
+          if (!(await more())) break;
+        }
+        if (buf[0] === ']'){ consume(1); break; }
+
+        let tileMatch;
+        while (!(tileMatch = buf.match(TILE_HEADER_RE))){
+          if (!(await more())) throw new Error('Foto-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
+        }
+        const [full, id, x, y, w, h, rot, z, naturalW, naturalH, filenameRaw, mime, dataMime] = tileMatch;
+        consume(full.length);
+
+        let closeIdx;
+        while ((closeIdx = buf.indexOf('"}')) === -1){
+          if (!(await more())) throw new Error('Foto-Daten unvollständig (Datei endet unerwartet).');
+        }
+        const base64 = buf.slice(0, closeIdx);
+        consume(closeIdx + 2);
+
+        yield {
+          type: 'tile',
+          meta: { id, x:Number(x), y:Number(y), w:Number(w), h:Number(h), rot:Number(rot), z:Number(z),
+                  naturalW:Number(naturalW), naturalH:Number(naturalH),
+                  filename: JSON.parse(filenameRaw), mime: dataMime || mime },
+          base64
+        };
+      }
+
+      while (buf.length === 0){ if (!(await more())) break; }
+      if (buf[0] !== '}') throw new Error('Projekt-Ende nicht gefunden — unerwartetes Format.');
+      consume(1);
+      yield { type: 'project-end' };
+    }
   }
 
   async function importProjectsBackup(file){
-    const text = await file.text();
-    let data;
-    try { data = JSON.parse(text); }
-    catch(err){ throw new Error('Datei ist kein gültiges Backup (kein JSON).'); }
-    if (!data || !Array.isArray(data.projects)) throw new Error('Datei enthält keine erkennbaren Joiner-Projekte.');
-
     const db = await openDB();
-    const tx = db.transaction('projects', 'readwrite');
-    const store = tx.objectStore('projects');
-    for (const p of data.projects){
-      const tiles = [];
-      for (const t of p.tiles){
-        const res = await fetch(t.data);
-        const rawBlob = await res.blob();
-        const namedFile = new File([rawBlob], t.filename || (t.id + '.jpg'), { type: t.mime || rawBlob.type });
-        tiles.push({ id: t.id, blob: namedFile, filename: namedFile.name,
-                     x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, z: t.z,
-                     naturalW: t.naturalW, naturalH: t.naturalH });
+    let currentProject = null;
+    let projectCount = 0, tileCount = 0;
+    try {
+      for await (const evt of parseBackupStream(file)){
+        if (evt.type === 'project-start'){
+          currentProject = { name: evt.name, savedAt: evt.savedAt, color: evt.color, tiles: [] };
+        } else if (evt.type === 'tile'){
+          const blob = base64ToBlob(evt.base64, evt.meta.mime);
+          const namedFile = new File([blob], evt.meta.filename || (evt.meta.id + '.jpg'), { type: evt.meta.mime });
+          currentProject.tiles.push({ id: evt.meta.id, blob: namedFile, filename: namedFile.name,
+                                       x: evt.meta.x, y: evt.meta.y, w: evt.meta.w, h: evt.meta.h,
+                                       rot: evt.meta.rot, z: evt.meta.z,
+                                       naturalW: evt.meta.naturalW, naturalH: evt.meta.naturalH });
+          tileCount++;
+          setBackupStatus('Stelle wieder her: „' + currentProject.name + '“ — Foto ' + currentProject.tiles.length + ' (insgesamt ' + tileCount + ')');
+          await tick();
+        } else if (evt.type === 'project-end'){
+          const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+          const tx = db.transaction('projects', 'readwrite');
+          tx.objectStore('projects').put({ id, name: currentProject.name, savedAt: currentProject.savedAt || Date.now(),
+                                            color: currentProject.color, tiles: currentProject.tiles });
+          await txDone(tx);
+          projectCount++;
+          currentProject = null;
+        }
       }
-      const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-      store.put({ id, name: p.name, savedAt: p.savedAt || Date.now(), color: p.color, tiles });
+    } finally {
+      db.close();
     }
-    await txDone(tx);
-    db.close();
+    if (!projectCount) throw new Error('Datei enthält keine erkennbaren Joiner-Projekte.');
+    return { projectCount, tileCount };
   }
 
   document.getElementById('backupBtn').addEventListener('click', async () => {
     const btn = document.getElementById('backupBtn');
-    const original = btn.textContent;
-    btn.textContent = 'Sichere…';
     btn.disabled = true;
     try { await exportAllProjectsBackup(); }
     catch(err){ console.error(err); alert('Backup fehlgeschlagen: ' + err.message); }
-    finally { btn.textContent = original; btn.disabled = false; }
+    finally { btn.disabled = false; setTimeout(() => setBackupStatus(''), 4000); }
   });
 
   const restoreInput = document.getElementById('restoreInput');
@@ -1305,17 +1446,28 @@
     restoreInput.value = '';
     if (!file) return;
     if (!confirm('Backup-Datei "' + file.name + '" importieren? Die enthaltenen Collagen werden als zusätzliche gespeicherte Projekte hinzugefügt (nichts wird überschrieben).')) return;
+    const btn = document.getElementById('restoreBtn');
+    btn.disabled = true;
     try {
-      await importProjectsBackup(file);
-      alert('Wiederhergestellt. Die Projekte erscheinen jetzt in der Liste.');
+      const result = await importProjectsBackup(file);
+      setBackupStatus('✓ Wiederhergestellt: ' + result.projectCount + ' Projekt(e), ' + result.tileCount + ' Foto(s).');
       openLoadModal();
     } catch(err){
       console.error(err);
       alert('Wiederherstellen fehlgeschlagen: ' + err.message);
+      setBackupStatus('');
+    } finally {
+      btn.disabled = false;
     }
   });
 
   window.addEventListener('resize', () => updateBoardScale());
+
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
 
   render();
 })();
