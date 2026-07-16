@@ -1,9 +1,9 @@
 // Joiner — minimal service worker.
 // Caches the app shell so it opens even offline; always tries the network
 // first for the HTML itself so you get updates, falls back to cache offline.
-const CACHE_NAME = 'joiner-shell-v1';
+const CACHE_NAME = 'joiner-shell-v2';
 const SHELL_FILES = [
-  './joiner.html',
+  './',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -25,6 +25,8 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+const SHELL_URLS = SHELL_FILES.map(f => new URL(f, self.registration.scope).href);
+
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return; // never intercept POST/PUT etc.
@@ -33,7 +35,7 @@ self.addEventListener('fetch', event => {
     fetch(req)
       .then(res => {
         // keep the shell fresh in the background
-        if (res && res.ok && SHELL_FILES.some(f => req.url.endsWith(f.replace('./','')))){
+        if (res && res.ok && SHELL_URLS.includes(req.url)){
           const copy = res.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
         }

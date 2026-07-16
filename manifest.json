@@ -2,7 +2,7 @@
   "name": "Joiner — Fotocollagen",
   "short_name": "Joiner",
   "description": "Fotocollagen im Stil von David Hockney",
-  "start_url": "./joiner.html",
+  "start_url": ".",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
