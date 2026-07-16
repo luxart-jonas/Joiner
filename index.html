@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Joiner — Fotocollagen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0d;
+    --panel:#151517;
+    --panel-2:#1b1b1e;
+    --border:#2a2a2e;
+    --gold:#d4af37;
+    --gold-soft:#c8a96e;
+    --text:#eae7df;
+    --text-dim:#8f8c85;
+    --mat:#121214;
+    --paper:#f2efe7;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100%;}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:14px 18px;background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border-bottom:1px solid var(--border);flex-wrap:wrap;z-index:10;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand-mark{
+    width:34px;height:34px;border:1px solid var(--gold-soft);border-radius:4px;
+    display:flex;align-items:center;justify-content:center;color:var(--gold);
+    font-family:'Fraunces',serif;font-size:15px;font-style:italic;flex-shrink:0;
+  }
+  .brand-text h1{font-family:'Fraunces',serif;font-weight:600;font-size:19px;margin:0;letter-spacing:.2px;color:var(--text);}
+  .brand-text p{margin:0;font-size:11.5px;color:var(--text-dim);letter-spacing:.15px;}
+  .actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .btn{
+    appearance:none;border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:9px 14px;border-radius:6px;font-family:'Inter',sans-serif;font-size:13px;font-weight:500;
+    cursor:pointer;transition:border-color .15s,background .15s,color .15s;display:inline-flex;align-items:center;gap:6px;
+    white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--gold-soft);color:var(--gold-soft);}
+  .btn-gold{background:var(--gold);border-color:var(--gold);color:#1a1608;font-weight:600;}
+  .btn-gold:hover{background:var(--gold-soft);border-color:var(--gold-soft);color:#1a1608;}
+  .btn-gold-outline{border-color:var(--gold-soft);color:var(--gold-soft);}
+  .btn-gold-outline:hover{background:rgba(212,175,55,.1);}
+  .btn-ghost{background:transparent;color:var(--text-dim);border-color:transparent;}
+  .btn-ghost:hover{color:#e2a2a2;border-color:transparent;background:rgba(226,90,90,.08);}
+  .btn:disabled{opacity:.5;cursor:default;pointer-events:none;}
+
+  /* ---------- Stage ---------- */
+  .stage{flex:1;position:relative;overflow:hidden;background:
+    radial-gradient(ellipse at 50% 0%, #56565d 0%, #424248 65%);
+  }
+  .viewport{
+    position:absolute;inset:0;overflow:auto;
+  }
+  .board-frame{position:relative;}
+  .board{
+    position:relative;transform-origin:top left;background:var(--mat);
+    box-shadow:0 30px 80px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.03);
+    border-radius:2px;
+  }
+  .empty-hint{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;color:var(--text-dim);font-size:14px;line-height:1.7;
+    font-family:'Inter',sans-serif;pointer-events:none;width:80%;max-width:360px;
+  }
+  .empty-hint b{color:var(--gold-soft);font-weight:500;}
+
+  /* ---------- Tiles ---------- */
+  .tile{
+    position:absolute;box-sizing:border-box;
+    box-shadow:0 4px 14px rgba(0,0,0,.5);
+    cursor:grab;touch-action:none;user-select:none;
+  }
+  .tile:active{cursor:grabbing;}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
+  .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
+  .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
+
+  .marquee{
+    position:fixed;display:none;border:1px dashed var(--gold);
+    background:rgba(212,175,55,.12);pointer-events:none;z-index:9999;
+  }
+
+  .mode-badge{
+    display:none;align-items:center;gap:6px;padding:8px 12px;border-radius:6px;
+    background:rgba(111,195,232,.12);border:1px solid #6fc3e8;color:#6fc3e8;
+    font-size:12.5px;font-weight:500;white-space:nowrap;
+  }
+
+  .color-control{display:flex;align-items:center;gap:6px;}
+  .color-swatch{
+    width:34px;height:34px;border-radius:6px;border:1px solid var(--border);
+    cursor:pointer;display:block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+    transition:border-color .15s;
+  }
+  .color-swatch:hover{border-color:var(--gold-soft);}
+  #bgColorInput{
+    position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;
+  }
+  #eyedropperBtn{padding:9px 11px;font-size:15px;}
+
+  /* ---------- Export popover ---------- */
+  .export-wrap{position:relative;display:inline-flex;}
+  .export-panel{
+    display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:200;
+    width:240px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);padding:14px;
+  }
+  .export-panel.open{display:block;}
+  .export-panel label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;}
+  .export-panel .field{margin-bottom:12px;}
+  .export-panel input[type=number]{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;
+    color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;
+  }
+  .export-panel .checkline{display:flex;align-items:center;gap:8px;}
+  .export-panel .checkline label{margin:0;color:var(--text);font-size:13px;}
+  .export-panel .hint{font-size:11px;color:var(--text-dim);margin-top:3px;line-height:1.4;}
+  .export-panel .btn{width:100%;justify-content:center;}
+
+  /* ---------- Relink (missing images) ---------- */
+  .tile.broken img{display:none;}
+  .tile-broken-fill{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;background:repeating-linear-gradient(45deg,#241f16,#241f16 8px,#2c2515 8px,#2c2515 16px);
+    border:1px dashed var(--gold-soft);text-align:center;padding:6px;
+  }
+  .tile-broken-fill span{font-size:11px;color:var(--gold-soft);line-height:1.3;word-break:break-all;padding:0 4px;}
+  .relink-btn{
+    appearance:none;border:1px solid var(--gold-soft);background:rgba(212,175,55,.12);color:var(--gold-soft);
+    padding:5px 9px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;
+  }
+  .relink-btn:hover{background:var(--gold);color:#1a1608;}
+
+  .modal-footer{
+    display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap;
+  }
+  .modal-footer .btn{font-size:12.5px;padding:8px 12px;}
+
+  /* ---------- Load modal ---------- */
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(8,8,9,.72);
+    align-items:center;justify-content:center;z-index:1000;padding:20px;
+  }
+  .modal{
+    width:min(480px, 100%);max-height:80vh;display:flex;flex-direction:column;
+    background:var(--panel);border:1px solid var(--border);border-radius:10px;
+    box-shadow:0 30px 80px rgba(0,0,0,.55);overflow:hidden;
+  }
+  .modal-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 18px;border-bottom:1px solid var(--border);
+  }
+  .modal-header h3{margin:0;font-family:'Fraunces',serif;font-weight:600;font-size:17px;color:var(--text);}
+  .modal-close{
+    background:none;border:none;color:var(--text-dim);font-size:20px;line-height:1;
+    cursor:pointer;padding:4px 8px;border-radius:4px;
+  }
+  .modal-close:hover{color:var(--gold-soft);}
+  .modal-body{overflow-y:auto;padding:8px;}
+  .modal-empty{color:var(--text-dim);font-size:13.5px;text-align:center;padding:30px 10px;}
+  .project-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:12px 10px;border-radius:6px;
+  }
+  .project-row:hover{background:var(--panel-2);}
+  .project-info{min-width:0;}
+  .project-name{color:var(--text);font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .project-meta{color:var(--text-dim);font-size:12px;margin-top:2px;}
+  .project-actions{display:flex;gap:6px;flex-shrink:0;}
+  .project-actions .btn{padding:7px 11px;font-size:12.5px;}
+
+  .handle{
+    position:absolute;display:flex;align-items:center;justify-content:center;
+    width:28px;height:28px;border-radius:50%;background:var(--gold);color:#1a1608;
+    font-size:14px;font-weight:600;border:2px solid var(--mat);cursor:pointer;z-index:5;
+    touch-action:none;
+  }
+  .delete-handle{top:-14px;right:-14px;background:#3a1414;color:#e2a2a2;border-color:var(--mat);font-size:16px;line-height:1;}
+  .rotate-handle{top:-38px;left:50%;transform:translateX(-50%);cursor:grab;}
+  .rotate-handle:active{cursor:grabbing;}
+  .resize-handle{bottom:-14px;right:-14px;cursor:nwse-resize;font-size:12px;}
+
+  .stage.dragover .board-frame::after{
+    content:'Fotos hier ablegen';
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(212,175,55,.08);border:2px dashed var(--gold-soft);
+    color:var(--gold-soft);font-size:15px;border-radius:4px;z-index:50;
+  }
+
+  @media (max-width:640px){
+    .brand-text p{display:none;}
+    .toolbar{padding:12px;}
+    .btn{padding:9px 11px;font-size:12.5px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="toolbar">
+    <div class="brand">
+      <div class="brand-mark">J</div>
+      <div class="brand-text">
+        <h1>Joiner</h1>
+        <p>Fotocollagen im Stil von David Hockney</p>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="mode-badge" id="modeBadge">🔄 Drehmodus — R zum Beenden</span>
+      <div class="color-control" title="Hintergrundfarbe der Arbeits-/Exportfläche">
+        <label class="color-swatch" id="colorSwatchLabel" for="bgColorInput"></label>
+        <input type="color" id="bgColorInput" value="#121214">
+        <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
+      </div>
+      <label class="btn btn-gold" for="fileInput">＋ Fotos</label>
+      <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <button id="relinkBtn" class="btn" title="Fehlende Bilder wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
+      <input id="relinkInput" type="file" accept="image/*" multiple hidden>
+      <button id="reassembleBtn" class="btn">⊞ In Block legen</button>
+      <button id="saveBtn" class="btn">💾 Speichern</button>
+      <button id="loadBtn" class="btn">📂 Laden</button>
+      <div class="export-wrap">
+        <button id="exportBtn" class="btn btn-gold-outline">Exportieren ▾</button>
+        <div class="export-panel" id="exportPanel">
+          <div class="field">
+            <label for="exportWidthInput">Breite (Pixel)</label>
+            <input type="number" id="exportWidthInput" min="100" step="10">
+            <p class="hint" id="exportHint"></p>
+          </div>
+          <div class="field checkline">
+            <input type="checkbox" id="exportTransparent">
+            <label for="exportTransparent">Transparenter Hintergrund</label>
+          </div>
+          <button id="exportConfirmBtn" class="btn btn-gold">PNG exportieren</button>
+        </div>
+      </div>
+      <button id="clearBtn" class="btn btn-ghost">Zurücksetzen</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="viewport" id="viewport">
+      <div class="board-frame" id="boardFrame">
+        <div class="board" id="board">
+          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="loadModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Gespeicherte Collagen</h3>
+      <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
+    </div>
+    <div class="modal-body" id="projectList"></div>
+    <div class="modal-footer">
+      <button id="backupBtn" class="btn btn-gold-outline">⬇️ Alle sichern (Backup-Datei)</button>
+      <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
+      <input id="restoreInput" type="file" accept="application/json,.json" hidden>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const ROW_HEIGHT = 340;   // board units — height every photo gets in the block layout
+  const ROW_GAP = 10;       // gap between photos
+  const BLOCK_WRAP_WIDTH = 1250; // wrap to a new row once a row reaches roughly this width — keeps photos as a block, not one long strip
+
+  const board = document.getElementById('board');
+  const viewport = document.getElementById('viewport');
+  const stage = document.getElementById('stage');
+  const emptyHint = document.getElementById('emptyHint');
+  const fileInput = document.getElementById('fileInput');
+
+  let globalTilt = 0;
+  const state = { tiles: [], selectedIds: new Set() };
+  let boardScale = 1;
+  let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
+  let uid = 1;
+  let maxZ = 0;
+  let dragMode = 'move'; // 'move' | 'rotate' — toggled with R, for trackpad users who can't hold Alt while dragging
+  let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
+  const modeBadge = document.getElementById('modeBadge');
+  function updateModeBadge(){
+    modeBadge.style.display = dragMode === 'rotate' ? 'inline-flex' : 'none';
+  }
+
+  function rand(min,max){ return min + Math.random()*(max-min); }
+
+  const boardFrame = document.getElementById('boardFrame');
+  const BOARD_MARGIN = 80; // board-unit padding kept on every side of the export area
+
+  // ---------- Background color (work area = export area) ----------
+  let boardColor = '#121214';
+  const bgColorInput = document.getElementById('bgColorInput');
+  const colorSwatchLabel = document.getElementById('colorSwatchLabel');
+  const eyedropperBtn = document.getElementById('eyedropperBtn');
+
+  function setBoardColor(hex){
+    boardColor = hex;
+    board.style.background = hex;
+    colorSwatchLabel.style.background = hex;
+    bgColorInput.value = hex;
+  }
+  setBoardColor(boardColor);
+
+  bgColorInput.addEventListener('input', e => setBoardColor(e.target.value));
+
+  if (window.EyeDropper){
+    eyedropperBtn.addEventListener('click', async () => {
+      try {
+        const result = await new EyeDropper().open();
+        setBoardColor(result.sRGBHex);
+      } catch(err){ /* user cancelled the pick — ignore */ }
+    });
+  } else {
+    eyedropperBtn.style.display = 'none'; // not supported in this browser (e.g. Safari/Firefox)
+  }
+
+  function boardWidth(){
+    let maxX = 300;
+    state.tiles.forEach(t => { maxX = Math.max(maxX, t.x + t.w); });
+    return maxX + BOARD_MARGIN;
+  }
+  function boardHeight(){
+    let maxY = 200;
+    state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
+    return maxY + BOARD_MARGIN;
+  }
+
+  // corners of a (possibly rotated) tile, in board coordinates — used to get an accurate bounding box
+  function tileCorners(t){
+    const cx = t.x + t.w/2, cy = t.y + t.h/2;
+    const rad = t.rot * Math.PI/180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const hw = t.w/2, hh = t.h/2;
+    return [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy]) => [cx + dx*cos - dy*sin, cy + dx*sin + dy*cos]);
+  }
+
+  // Cmd/Ctrl+F: centers the whole composition so it has exactly the same margin on all four sides.
+  function centerComposition(){
+    if (!state.tiles.length) return;
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    state.tiles.forEach(t => {
+      tileCorners(t).forEach(([px,py]) => {
+        minX = Math.min(minX, px); minY = Math.min(minY, py);
+        maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+      });
+    });
+    const shiftX = BOARD_MARGIN - minX;
+    const shiftY = BOARD_MARGIN - minY;
+    state.tiles.forEach(t => { t.x += shiftX; t.y += shiftY; });
+    viewZoom = 1;
+    render();
+  }
+
+  function updateBoardScale(){
+    const margin = 40;
+    const availW = Math.max(200, viewport.clientWidth - margin*2);
+    const availH = Math.max(200, viewport.clientHeight - margin*2);
+    const bw = boardWidth();
+    const bh = boardHeight();
+    const autoFit = Math.min(availW / bw, availH / bh, 1.4);
+    boardScale = autoFit * viewZoom;
+
+    board.style.width = bw + 'px';
+    board.style.height = bh + 'px';
+    board.style.transform = 'scale(' + boardScale + ')';
+    board.style.transformOrigin = 'top left';
+
+    const frameW = bw * boardScale, frameH = bh * boardScale;
+    boardFrame.style.width = frameW + 'px';
+    boardFrame.style.height = frameH + 'px';
+    const marginX = Math.max(0, (viewport.clientWidth - frameW) / 2);
+    const marginY = Math.max(0, (viewport.clientHeight - frameH) / 2);
+    boardFrame.style.margin = marginY + 'px ' + marginX + 'px';
+  }
+
+  // Lays every current photo out as a block — left to right, wrapping to a new row
+  // roughly every BLOCK_WRAP_WIDTH — in the order they were added (reading order),
+  // instead of one long strip. Keeps photos noticeably bigger on screen.
+  function layoutBlock(){
+    let x = 0, y = 0, rowH = 0;
+    state.tiles.forEach((t, i) => {
+      const scale = ROW_HEIGHT / t.naturalH;
+      const w = t.naturalW * scale, h = ROW_HEIGHT;
+      if (x > 0 && x + w > BLOCK_WRAP_WIDTH){
+        y += rowH + ROW_GAP;
+        x = 0; rowH = 0;
+      }
+      t.w = w; t.h = h; t.x = x; t.y = y; t.rot = 0; t.z = i + 1;
+      x += w + ROW_GAP;
+      rowH = Math.max(rowH, h);
+    });
+    maxZ = state.tiles.length;
+    blockCursor = { x, y, rowH };
+    viewZoom = 1;
+  }
+
+  function render(){
+    emptyHint.style.display = state.tiles.length ? 'none' : 'block';
+    board.querySelectorAll('.tile').forEach(el => el.remove());
+    const onlySelected = state.selectedIds.size === 1 ? [...state.selectedIds][0] : null;
+
+    state.tiles.forEach(tile => {
+      const isSelected = state.selectedIds.has(tile.id);
+      const el = document.createElement('div');
+      el.className = 'tile' + (isSelected ? ' selected' : '') + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '');
+      el.style.left = tile.x + 'px';
+      el.style.top = tile.y + 'px';
+      el.style.width = tile.w + 'px';
+      el.style.height = tile.h + 'px';
+      el.style.transform = 'rotate(' + tile.rot + 'deg)';
+      el.style.zIndex = tile.z;
+      el.dataset.id = tile.id;
+
+      const img = document.createElement('img');
+      img.draggable = false;
+      img.onerror = () => {
+        if (tile.broken) return; // already handled
+        tile.broken = true;
+        el.classList.add('broken');
+        renderBrokenFill(el, tile);
+      };
+      img.src = tile.url;
+      el.appendChild(img);
+
+      if (tile.broken){
+        el.classList.add('broken');
+        renderBrokenFill(el, tile);
+      }
+
+      if (tile.id === onlySelected){
+        const del = document.createElement('div');
+        del.className = 'handle delete-handle';
+        del.textContent = '×';
+        el.appendChild(del);
+
+        const rot = document.createElement('div');
+        rot.className = 'handle rotate-handle';
+        rot.textContent = '⟳';
+        el.appendChild(rot);
+
+        const res = document.createElement('div');
+        res.className = 'handle resize-handle';
+        res.textContent = '⤡';
+        el.appendChild(res);
+      }
+
+      el.addEventListener('pointerdown', e => onTilePointerDown(e, tile, el));
+      el.addEventListener('contextmenu', e => e.preventDefault());
+      board.appendChild(el);
+    });
+
+    updateBoardScale();
+  }
+
+  // ---------- Broken image placeholder + relink ----------
+  function renderBrokenFill(el, tile){
+    if (el.querySelector('.tile-broken-fill')) return;
+    const fill = document.createElement('div');
+    fill.className = 'tile-broken-fill';
+    const label = document.createElement('span');
+    label.textContent = '🖼️ fehlt\n' + (tile.filename || tile.id);
+    label.style.whiteSpace = 'pre-line';
+    const btn = document.createElement('button');
+    btn.className = 'relink-btn';
+    btn.textContent = '🔗 Datei wählen';
+    btn.addEventListener('pointerdown', e => e.stopPropagation());
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      relinkSingleTile(tile);
+    });
+    fill.appendChild(label);
+    fill.appendChild(btn);
+    el.appendChild(fill);
+  }
+
+  function brokenTiles(){
+    return state.tiles.filter(t => t.broken);
+  }
+
+  // relink one specific tile via a single-file picker
+  function relinkSingleTile(tile){
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', () => {
+      if (input.files && input.files[0]) applyRelink(tile, input.files[0]);
+    });
+    input.click();
+  }
+
+  function applyRelink(tile, file){
+    try { URL.revokeObjectURL(tile.url); } catch(err){}
+    tile.blob = file;
+    tile.filename = file.name;
+    tile.url = URL.createObjectURL(file);
+    tile.broken = false;
+    render();
+  }
+
+  // batch relink: pick many files at once, match to broken tiles by filename
+  const relinkBtn = document.getElementById('relinkBtn');
+  const relinkInput = document.getElementById('relinkInput');
+  relinkBtn.addEventListener('click', () => {
+    const missing = brokenTiles();
+    if (!missing.length){
+      alert('Aktuell fehlt kein Bild — alle Fotos sind geladen.\n\nDieser Knopf wird gebraucht, sobald ein Bild nicht mehr auffindbar ist (z. B. nach dem Umzug auf eine neue Adresse). Dann erscheint hier ein "Datei wählen"-Button direkt auf der Kachel.');
+      return;
+    }
+    relinkInput.click();
+  });
+  relinkInput.addEventListener('change', () => {
+    const files = Array.from(relinkInput.files || []);
+    relinkInput.value = '';
+    if (!files.length) return;
+    const missing = brokenTiles();
+    if (!missing.length) return;
+
+    const norm = s => (s || '').toLowerCase().trim();
+    const stem = s => norm(s).replace(/\.[a-z0-9]+$/, '');
+    let matchedCount = 0;
+    const usedFiles = new Set();
+
+    missing.forEach(tile => {
+      // exact filename match first, then match ignoring extension
+      let match = files.find(f => !usedFiles.has(f) && norm(f.name) === norm(tile.filename));
+      if (!match) match = files.find(f => !usedFiles.has(f) && stem(f.name) === stem(tile.filename));
+      if (match){ usedFiles.add(match); applyRelink(tile, match); matchedCount++; }
+    });
+
+    // if exactly one file selected and exactly one tile still missing, assume it belongs together
+    const stillMissing = brokenTiles();
+    const leftoverFiles = files.filter(f => !usedFiles.has(f));
+    if (stillMissing.length === 1 && leftoverFiles.length === 1){
+      applyRelink(stillMissing[0], leftoverFiles[0]);
+      matchedCount++;
+    }
+
+    const remaining = brokenTiles().length;
+    let msg = matchedCount + ' Bild' + (matchedCount === 1 ? '' : 'er') + ' wieder verknüpft.';
+    if (remaining) msg += '\n' + remaining + ' fehlen noch — Dateiname stimmte nicht überein. Nutze den 🔗-Knopf direkt auf der Kachel, um einzeln nachzubessern.';
+    alert(msg);
+  });
+
+  // ---------- Drag / Rotate / Resize ----------
+  function onTilePointerDown(e, tile, elOriginal){
+    e.stopPropagation();
+    e.preventDefault();
+    const cls = e.target.classList;
+
+    if (cls.contains('delete-handle')){
+      deleteTiles([tile.id]);
+      return;
+    }
+
+    // Shift: toggle this tile's membership in the group selection, no drag
+    if (e.shiftKey){
+      if (state.selectedIds.has(tile.id)) state.selectedIds.delete(tile.id);
+      else state.selectedIds.add(tile.id);
+      render();
+      return;
+    }
+
+    // Plain click: if this tile is already part of an active multi-selection, keep the
+    // whole group selected (so dragging moves everything together). Otherwise select just this tile.
+    const partOfGroup = state.selectedIds.has(tile.id) && state.selectedIds.size > 1;
+    if (!partOfGroup){
+      state.selectedIds = new Set([tile.id]);
+    }
+    render(); // rebuilds tile DOM (to show handles / selection outline) — re-fetch elements below
+    const el = board.querySelector('[data-id="' + tile.id + '"]') || elOriginal;
+    if (!el) return;
+
+    if (cls.contains('rotate-handle')) { startRotateGroup(e, tile); return; }
+    if (cls.contains('resize-handle')) { startResize(e, tile, el); return; }
+
+    if (e.altKey || dragMode === 'rotate'){ startRotateGroup(e, tile); return; }
+    startDragGroup(e, tile);
+  }
+
+  function bringForwardOneStep(tile){
+    const sorted = [...state.tiles].sort((a,b) => a.z - b.z);
+    const idx = sorted.findIndex(t => t.id === tile.id);
+    if (idx === -1 || idx === sorted.length - 1) return; // already topmost
+    const next = sorted[idx + 1];
+    const tmp = tile.z; tile.z = next.z; next.z = tmp;
+  }
+
+  function bringBackwardOneStep(tile){
+    const sorted = [...state.tiles].sort((a,b) => a.z - b.z);
+    const idx = sorted.findIndex(t => t.id === tile.id);
+    if (idx <= 0) return; // already at the back
+    const prev = sorted[idx - 1];
+    const tmp = tile.z; tile.z = prev.z; prev.z = tmp;
+  }
+
+  function groupBounds(tiles){
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    tiles.forEach(t => {
+      minX = Math.min(minX, t.x); minY = Math.min(minY, t.y);
+      maxX = Math.max(maxX, t.x+t.w); maxY = Math.max(maxY, t.y+t.h);
+    });
+    return { minX, minY, maxX, maxY, cx:(minX+maxX)/2, cy:(minY+maxY)/2 };
+  }
+
+  window.addEventListener('keydown', e => {
+    // Global view zoom — works everywhere, no selection needed
+    if (e.key === '+' || e.key === '='){
+      e.preventDefault();
+      viewZoom = Math.min(6, viewZoom * 1.15);
+      updateBoardScale();
+      return;
+    }
+    if (e.key === '-' || e.key === '_'){
+      e.preventDefault();
+      viewZoom = Math.max(0.15, viewZoom / 1.15);
+      updateBoardScale();
+      return;
+    }
+    // Cmd/Ctrl + A: select every photo
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a'){
+      e.preventDefault();
+      state.selectedIds = new Set(state.tiles.map(t => t.id));
+      render();
+      return;
+    }
+    // Cmd/Ctrl + F: center the whole composition with equal margin on all sides
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f'){
+      e.preventDefault();
+      centerComposition();
+      return;
+    }
+    // V / H (no modifier): move the active selection one step forward / backward
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && state.selectedIds.size){
+      if (e.key === 'v' || e.key === 'V'){
+        e.preventDefault();
+        [...state.tiles].filter(t => state.selectedIds.has(t.id))
+          .sort((a,b) => b.z - a.z).forEach(bringForwardOneStep);
+        render();
+        return;
+      }
+      if (e.key === 'h' || e.key === 'H'){
+        e.preventDefault();
+        [...state.tiles].filter(t => state.selectedIds.has(t.id))
+          .sort((a,b) => a.z - b.z).forEach(bringBackwardOneStep);
+        render();
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R'){
+        e.preventDefault();
+        dragMode = dragMode === 'rotate' ? 'move' : 'rotate';
+        updateModeBadge();
+        render();
+        return;
+      }
+    }
+    if (!state.selectedIds.size) return;
+    if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); deleteTiles([...state.selectedIds]); }
+    else if (e.key === 'Escape'){ state.selectedIds = new Set(); dragMode = 'move'; updateModeBadge(); render(); }
+  });
+
+  // Mouse wheel with Ctrl held / trackpad pinch-to-zoom (browsers report pinch as a
+  // ctrlKey wheel event) — zooms the view, same as the +/- keys.
+  stage.addEventListener('wheel', e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.08 : 1/1.08;
+    viewZoom = Math.max(0.15, Math.min(6, viewZoom * factor));
+    updateBoardScale();
+  }, { passive:false });
+
+  // Moves every tile in the current selection together (works for a single tile too).
+  function startDragGroup(e, primaryTile){
+    const ids = new Set(state.selectedIds);
+    const tiles = state.tiles.filter(t => ids.has(t.id));
+    const starts = tiles.map(t => ({ id:t.id, x:t.x, y:t.y }));
+    const primaryEl = board.querySelector('[data-id="' + primaryTile.id + '"]');
+    if (!primaryEl) return;
+    primaryEl.setPointerCapture(e.pointerId);
+    const startClientX = e.clientX, startClientY = e.clientY;
+
+    function move(ev){
+      const dx = (ev.clientX - startClientX) / boardScale;
+      const dy = (ev.clientY - startClientY) / boardScale;
+      tiles.forEach((t, i) => {
+        t.x = starts[i].x + dx;
+        t.y = starts[i].y + dy;
+        const el = board.querySelector('[data-id="' + t.id + '"]');
+        if (el){ el.style.left = t.x + 'px'; el.style.top = t.y + 'px'; }
+      });
+    }
+    function up(){
+      primaryEl.removeEventListener('pointermove', move);
+      primaryEl.removeEventListener('pointerup', up);
+      updateBoardScale();
+    }
+    primaryEl.addEventListener('pointermove', move);
+    primaryEl.addEventListener('pointerup', up);
+  }
+
+  // Rotates the whole selection together as one rigid body around the group's center
+  // (reduces to rotating a single tile around its own center when only one is selected).
+  function startRotateGroup(e, primaryTile){
+    const ids = new Set(state.selectedIds);
+    const tiles = state.tiles.filter(t => ids.has(t.id));
+    const b = groupBounds(tiles);
+    const boardRect = board.getBoundingClientRect();
+    const pivotScreenX = boardRect.left + b.cx * boardScale;
+    const pivotScreenY = boardRect.top + b.cy * boardScale;
+    const startAngle = Math.atan2(e.clientY - pivotScreenY, e.clientX - pivotScreenX) * 180/Math.PI;
+    const starts = tiles.map(t => ({ id:t.id, rot:t.rot, cx:t.x+t.w/2, cy:t.y+t.h/2, w:t.w, h:t.h }));
+
+    const primaryEl = board.querySelector('[data-id="' + primaryTile.id + '"]');
+    if (!primaryEl) return;
+    primaryEl.setPointerCapture(e.pointerId);
+
+    function move(ev){
+      const angle = Math.atan2(ev.clientY - pivotScreenY, ev.clientX - pivotScreenX) * 180/Math.PI;
+      const delta = angle - startAngle;
+      const rad = delta * Math.PI/180;
+      const cos = Math.cos(rad), sin = Math.sin(rad);
+      tiles.forEach((t, i) => {
+        const s = starts[i];
+        const relX = s.cx - b.cx, relY = s.cy - b.cy;
+        const newCx = b.cx + relX*cos - relY*sin;
+        const newCy = b.cy + relX*sin + relY*cos;
+        t.x = newCx - s.w/2;
+        t.y = newCy - s.h/2;
+        t.rot = s.rot + delta;
+        const el = board.querySelector('[data-id="' + t.id + '"]');
+        if (el){
+          el.style.left = t.x + 'px'; el.style.top = t.y + 'px';
+          el.style.transform = 'rotate(' + t.rot + 'deg)';
+        }
+      });
+    }
+    function up(){
+      primaryEl.removeEventListener('pointermove', move);
+      primaryEl.removeEventListener('pointerup', up);
+      updateBoardScale();
+    }
+    primaryEl.addEventListener('pointermove', move);
+    primaryEl.addEventListener('pointerup', up);
+  }
+
+  function startResize(e, tile, el){
+    el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    const dist0 = Math.max(1, Math.hypot(e.clientX - cx, e.clientY - cy));
+    const startW = tile.w, startH = tile.h;
+    const centerBoardX = tile.x + tile.w/2, centerBoardY = tile.y + tile.h/2;
+
+    function move(ev){
+      const dist = Math.hypot(ev.clientX - cx, ev.clientY - cy);
+      let factor = dist / dist0;
+      factor = Math.max(0.25, Math.min(4, factor));
+      tile.w = startW * factor;
+      tile.h = startH * factor;
+      tile.x = centerBoardX - tile.w/2;
+      tile.y = centerBoardY - tile.h/2;
+      el.style.width = tile.w + 'px';
+      el.style.height = tile.h + 'px';
+      el.style.left = tile.x + 'px';
+      el.style.top = tile.y + 'px';
+    }
+    function up(){
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      updateBoardScale();
+    }
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  }
+
+  function deleteTiles(ids){
+    const idSet = new Set(ids);
+    state.tiles = state.tiles.filter(t => !idSet.has(t.id));
+    idSet.forEach(id => state.selectedIds.delete(id));
+    render();
+  }
+
+  // click-and-drag on empty background = draw a selection box (marquee) and select every
+  // photo inside it — works with click+drag alone, no modifier keys needed (trackpad-friendly).
+  // A plain click with no drag still just deselects, as before.
+  viewport.addEventListener('pointerdown', e => {
+    const isBackground = e.target === viewport || e.target === board ||
+      e.target.closest('.board-frame') === e.target.parentElement;
+    if (!isBackground) return;
+    if (e.target.classList.contains('tile') || e.target.closest('.tile')) return;
+    startMarqueeSelect(e);
+  });
+
+  function startMarqueeSelect(e){
+    const startClientX = e.clientX, startClientY = e.clientY;
+    const additive = e.shiftKey;
+    let moved = false;
+    const THRESHOLD = 5;
+
+    const box = document.createElement('div');
+    box.className = 'marquee';
+    document.body.appendChild(box);
+
+    function updateBox(x1,y1,x2,y2){
+      box.style.left = Math.min(x1,x2) + 'px';
+      box.style.top = Math.min(y1,y2) + 'px';
+      box.style.width = Math.abs(x2-x1) + 'px';
+      box.style.height = Math.abs(y2-y1) + 'px';
+    }
+
+    function move(ev){
+      const dx = ev.clientX - startClientX, dy = ev.clientY - startClientY;
+      if (!moved && (Math.abs(dx) > THRESHOLD || Math.abs(dy) > THRESHOLD)){
+        moved = true;
+        box.style.display = 'block';
+      }
+      if (moved) updateBox(startClientX, startClientY, ev.clientX, ev.clientY);
+    }
+
+    function up(ev){
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      box.remove();
+
+      if (moved){
+        const rect = board.getBoundingClientRect();
+        const x1 = (Math.min(startClientX, ev.clientX) - rect.left) / boardScale;
+        const y1 = (Math.min(startClientY, ev.clientY) - rect.top) / boardScale;
+        const x2 = (Math.max(startClientX, ev.clientX) - rect.left) / boardScale;
+        const y2 = (Math.max(startClientY, ev.clientY) - rect.top) / boardScale;
+        const hits = state.tiles.filter(t =>
+          !(t.x + t.w < x1 || t.x > x2 || t.y + t.h < y1 || t.y > y2)
+        );
+        if (additive) hits.forEach(t => state.selectedIds.add(t.id));
+        else state.selectedIds = new Set(hits.map(t => t.id));
+      } else {
+        state.selectedIds = new Set();
+        dragMode = 'move';
+        updateModeBadge();
+      }
+      render();
+    }
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }
+
+  // ---------- Add photos ----------
+  function loadImageDims(url){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  async function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    const newTiles = [];
+    for (const file of files){
+      const url = URL.createObjectURL(file);
+      try {
+        const dims = await loadImageDims(url);
+        newTiles.push({ id: 't' + (uid++), url, blob: file, filename: file.name, naturalW: dims.w, naturalH: dims.h,
+                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false });
+      } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
+    }
+    if (!newTiles.length) return;
+
+    // append new photos into the block layout, continuing in reading order right where
+    // the last one left off — existing tiles (and any manual edits already made) are untouched
+    newTiles.forEach(t => {
+      const scale = ROW_HEIGHT / t.naturalH;
+      const w = t.naturalW * scale, h = ROW_HEIGHT;
+      if (blockCursor.x > 0 && blockCursor.x + w > BLOCK_WRAP_WIDTH){
+        blockCursor.y += blockCursor.rowH + ROW_GAP;
+        blockCursor.x = 0; blockCursor.rowH = 0;
+      }
+      t.w = w; t.h = h; t.x = blockCursor.x; t.y = blockCursor.y; t.rot = 0; t.z = ++maxZ;
+      blockCursor.x += w + ROW_GAP;
+      blockCursor.rowH = Math.max(blockCursor.rowH, h);
+    });
+    state.tiles.push(...newTiles);
+    render();
+  }
+
+  fileInput.addEventListener('change', e => {
+    addFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  // drag & drop from desktop
+  ['dragenter','dragover'].forEach(evt => stage.addEventListener(evt, e => {
+    e.preventDefault(); stage.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(evt => stage.addEventListener(evt, e => {
+    e.preventDefault();
+    if (evt === 'dragleave' && e.target !== stage) return;
+    stage.classList.remove('dragover');
+  }));
+  stage.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+
+  // ---------- Row layout / Clear ----------
+  document.getElementById('reassembleBtn').addEventListener('click', () => {
+    if (!state.tiles.length) return;
+    layoutBlock();
+    render();
+  });
+
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (!state.tiles.length) return;
+    if (!confirm('Alle Fotos entfernen?')) return;
+    state.tiles = [];
+    state.selectedIds = new Set();
+    maxZ = 0;
+    viewZoom = 1;
+    dragMode = 'move';
+    blockCursor = { x:0, y:0, rowH:0 };
+    updateModeBadge();
+    render();
+  });
+
+  // ---------- Export ----------
+  const DEFAULT_RES = 2.5;
+  const exportBtn = document.getElementById('exportBtn');
+  const exportPanel = document.getElementById('exportPanel');
+  const exportWidthInput = document.getElementById('exportWidthInput');
+  const exportHint = document.getElementById('exportHint');
+  const exportTransparent = document.getElementById('exportTransparent');
+  const exportConfirmBtn = document.getElementById('exportConfirmBtn');
+
+  function updateExportHint(){
+    const bw = Math.round(boardWidth());
+    const bh = Math.round(boardHeight());
+    if (!exportWidthInput.value) exportWidthInput.placeholder = Math.round(bw * DEFAULT_RES);
+    exportHint.textContent = 'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×).';
+  }
+
+  exportBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
+    updateExportHint();
+    exportPanel.classList.toggle('open');
+  });
+  document.addEventListener('click', e => {
+    if (!exportPanel.contains(e.target) && e.target !== exportBtn) exportPanel.classList.remove('open');
+  });
+  exportPanel.addEventListener('click', e => e.stopPropagation());
+
+  exportConfirmBtn.addEventListener('click', async () => {
+    if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
+    const originalText = exportConfirmBtn.textContent;
+    exportConfirmBtn.textContent = 'Exportiere…';
+    exportConfirmBtn.disabled = true;
+    try {
+      const bw = boardWidth();
+      const bh = boardHeight();
+      const targetWidth = parseFloat(exportWidthInput.value);
+      const RES = (targetWidth && targetWidth > 0) ? (targetWidth / bw) : DEFAULT_RES;
+      const transparent = exportTransparent.checked;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(bw * RES);
+      canvas.height = Math.round(bh * RES);
+      const ctx = canvas.getContext('2d');
+      if (!transparent){
+        ctx.fillStyle = boardColor;
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+
+      const ordered = [...state.tiles].sort((a,b) => a.z - b.z);
+      const results = await Promise.allSettled(ordered.map(t => new Promise((resolve,reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = t.url;
+      })));
+      const skipped = results.filter(r => r.status === 'rejected').length;
+
+      ordered.forEach((tile, i) => {
+        if (results[i].status !== 'fulfilled') return; // fehlendes Bild — bitte zuerst über "🔗 Verknüpfen" ersetzen
+        const img = results[i].value;
+        ctx.save();
+        ctx.translate((tile.x + tile.w/2) * RES, (tile.y + tile.h/2) * RES);
+        ctx.rotate(tile.rot * Math.PI/180);
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 10 * RES;
+        ctx.shadowOffsetY = 3 * RES;
+
+        const iw = tile.w * RES, ih = tile.h * RES;
+        // object-fit: cover
+        const scale = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
+        const sw = iw/scale, sh = ih/scale;
+        const sx = (img.naturalWidth - sw)/2, sy = (img.naturalHeight - sh)/2;
+        ctx.drawImage(img, sx, sy, sw, sh, -iw/2, -ih/2, iw, ih);
+        ctx.restore();
+      });
+
+      canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'joiner-collage.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        if (skipped) alert(skipped + ' Bild' + (skipped === 1 ? ' fehlt' : 'er fehlen') + ' und wurde' + (skipped === 1 ? '' : 'n') + ' im Export ausgelassen. Nutze "🔗 Verknüpfen", um sie wiederzufinden, dann erneut exportieren.');
+      }, 'image/png');
+      exportPanel.classList.remove('open');
+    } catch(err){
+      console.error(err);
+      alert('Export fehlgeschlagen.');
+    } finally {
+      exportConfirmBtn.textContent = originalText;
+      exportConfirmBtn.disabled = false;
+    }
+  });
+
+  // ---------- Save / Load projects (IndexedDB — named, multiple slots, keeps the actual photos) ----------
+  function openDB(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('joiner-db', 2);
+      req.onupgradeneeded = (e) => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('projects')){
+          db.createObjectStore('projects', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function txDone(tx){
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  function defaultProjectName(){
+    const d = new Date();
+    const date = d.toLocaleDateString('de-DE');
+    const time = d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+    return 'Collage ' + date + ' ' + time;
+  }
+
+  async function saveProjectAs(name){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
+    const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    store.put({
+      id, name, savedAt: Date.now(), color: boardColor,
+      tiles: state.tiles.map(t => ({ id:t.id, blob:t.blob, filename:t.filename || (t.blob && t.blob.name) || null,
+                                      x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
+                                      naturalW:t.naturalW, naturalH:t.naturalH }))
+    });
+    await txDone(tx);
+    db.close();
+  }
+
+  async function listProjects(){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readonly');
+    const records = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('projects').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return records.sort((a,b) => b.savedAt - a.savedAt);
+  }
+
+  async function loadProjectById(id){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readonly');
+    const record = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('projects').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!record) return false;
+
+    state.tiles = record.tiles.map(r => ({
+      id: r.id, url: URL.createObjectURL(r.blob), blob: r.blob,
+      filename: (r.blob && r.blob.name) ? r.blob.name : (r.filename || null), broken: false,
+      naturalW: r.naturalW, naturalH: r.naturalH,
+      x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
+    }));
+    maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
+    const nums = state.tiles.map(t => parseInt(t.id.replace('t',''), 10) || 0);
+    uid = (nums.length ? Math.max(...nums) : 0) + 1;
+    let maxY = 0;
+    state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
+    blockCursor = { x:0, y: state.tiles.length ? maxY + ROW_GAP : 0, rowH:0 };
+    state.selectedIds = new Set();
+    viewZoom = 1;
+    dragMode = 'move';
+    if (record.color) setBoardColor(record.color);
+    updateModeBadge();
+    render();
+    return true;
+  }
+
+  async function deleteProjectById(id){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').delete(id);
+    await txDone(tx);
+    db.close();
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveBtn');
+    const original = btn.textContent;
+    const name = prompt('Name für diesen Stand:', defaultProjectName());
+    if (name === null) return; // cancelled
+    try {
+      await saveProjectAs(name.trim() || defaultProjectName());
+      btn.textContent = '✓ Gespeichert';
+    } catch(err){
+      console.error(err);
+      btn.textContent = '✗ Fehler';
+    }
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  });
+
+  const loadModalOverlay = document.getElementById('loadModalOverlay');
+  const projectList = document.getElementById('projectList');
+
+  async function openLoadModal(){
+    projectList.innerHTML = '<p class="modal-empty">Lade Liste…</p>';
+    loadModalOverlay.style.display = 'flex';
+    let projects;
+    try { projects = await listProjects(); }
+    catch(err){ console.error(err); projectList.innerHTML = '<p class="modal-empty">Fehler beim Laden der Liste.</p>'; return; }
+
+    if (!projects.length){
+      projectList.innerHTML = '<p class="modal-empty">Noch keine gespeicherten Collagen.</p>';
+      return;
+    }
+    projectList.innerHTML = '';
+    projects.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'project-row';
+
+      const info = document.createElement('div');
+      info.className = 'project-info';
+      const title = document.createElement('div');
+      title.className = 'project-name';
+      title.textContent = p.name;
+      const meta = document.createElement('div');
+      meta.className = 'project-meta';
+      const count = p.tiles.length;
+      meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos');
+      info.appendChild(title); info.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'project-actions';
+
+      const loadBtnEl = document.createElement('button');
+      loadBtnEl.className = 'btn btn-gold-outline';
+      loadBtnEl.textContent = 'Laden';
+      loadBtnEl.addEventListener('click', async () => {
+        if (state.tiles.length && !confirm('Aktuellen Stand ersetzen mit „' + p.name + '“?')) return;
+        await loadProjectById(p.id);
+        closeLoadModal();
+      });
+
+      const delBtnEl = document.createElement('button');
+      delBtnEl.className = 'btn btn-ghost';
+      delBtnEl.textContent = 'Löschen';
+      delBtnEl.addEventListener('click', async () => {
+        if (!confirm('„' + p.name + '“ endgültig löschen?')) return;
+        await deleteProjectById(p.id);
+        openLoadModal();
+      });
+
+      actions.appendChild(loadBtnEl);
+      actions.appendChild(delBtnEl);
+      row.appendChild(info);
+      row.appendChild(actions);
+      projectList.appendChild(row);
+    });
+  }
+
+  function closeLoadModal(){ loadModalOverlay.style.display = 'none'; }
+
+  document.getElementById('loadBtn').addEventListener('click', openLoadModal);
+  document.getElementById('closeLoadModal').addEventListener('click', closeLoadModal);
+  loadModalOverlay.addEventListener('pointerdown', e => { if (e.target === loadModalOverlay) closeLoadModal(); });
+
+  // ---------- Backup (export all projects to a file) / Restore ----------
+  function blobToDataURL(blob){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function downloadFile(blob, filename){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  async function exportAllProjectsBackup(){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readonly');
+    const records = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('projects').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!records.length){ alert('Noch keine gespeicherten Collagen zum Sichern.'); return; }
+
+    const out = { app: 'joiner', version: 1, exportedAt: Date.now(), projects: [] };
+    for (const p of records){
+      const tiles = [];
+      for (const t of p.tiles){
+        const data = await blobToDataURL(t.blob);
+        tiles.push({
+          id: t.id, x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, z: t.z,
+          naturalW: t.naturalW, naturalH: t.naturalH,
+          filename: t.filename || (t.blob && t.blob.name) || null,
+          mime: t.blob ? t.blob.type : 'image/jpeg',
+          data
+        });
+      }
+      out.projects.push({ name: p.name, savedAt: p.savedAt, color: p.color, tiles });
+    }
+    const jsonBlob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    const stamp = new Date().toISOString().slice(0,10);
+    downloadFile(jsonBlob, 'joiner-backup-' + stamp + '.json');
+  }
+
+  async function importProjectsBackup(file){
+    const text = await file.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch(err){ throw new Error('Datei ist kein gültiges Backup (kein JSON).'); }
+    if (!data || !Array.isArray(data.projects)) throw new Error('Datei enthält keine erkennbaren Joiner-Projekte.');
+
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
+    for (const p of data.projects){
+      const tiles = [];
+      for (const t of p.tiles){
+        const res = await fetch(t.data);
+        const rawBlob = await res.blob();
+        const namedFile = new File([rawBlob], t.filename || (t.id + '.jpg'), { type: t.mime || rawBlob.type });
+        tiles.push({ id: t.id, blob: namedFile, filename: namedFile.name,
+                     x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, z: t.z,
+                     naturalW: t.naturalW, naturalH: t.naturalH });
+      }
+      const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+      store.put({ id, name: p.name, savedAt: p.savedAt || Date.now(), color: p.color, tiles });
+    }
+    await txDone(tx);
+    db.close();
+  }
+
+  document.getElementById('backupBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('backupBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Sichere…';
+    btn.disabled = true;
+    try { await exportAllProjectsBackup(); }
+    catch(err){ console.error(err); alert('Backup fehlgeschlagen: ' + err.message); }
+    finally { btn.textContent = original; btn.disabled = false; }
+  });
+
+  const restoreInput = document.getElementById('restoreInput');
+  document.getElementById('restoreBtn').addEventListener('click', () => restoreInput.click());
+  restoreInput.addEventListener('change', async () => {
+    const file = restoreInput.files && restoreInput.files[0];
+    restoreInput.value = '';
+    if (!file) return;
+    if (!confirm('Backup-Datei "' + file.name + '" importieren? Die enthaltenen Collagen werden als zusätzliche gespeicherte Projekte hinzugefügt (nichts wird überschrieben).')) return;
+    try {
+      await importProjectsBackup(file);
+      alert('Wiederhergestellt. Die Projekte erscheinen jetzt in der Liste.');
+      openLoadModal();
+    } catch(err){
+      console.error(err);
+      alert('Wiederherstellen fehlgeschlagen: ' + err.message);
+    }
+  });
+
+  window.addEventListener('resize', () => updateBoardScale());
+
+  render();
+})();
+</script>
+</body>
+</html>
