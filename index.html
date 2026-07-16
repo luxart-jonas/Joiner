@@ -114,6 +114,7 @@
     position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;
   }
   #eyedropperBtn{padding:9px 11px;font-size:15px;}
+  .current-project-label{font-size:11.5px;color:var(--text-dim);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
 
   /* ---------- Export popover ---------- */
   .export-wrap{position:relative;display:inline-flex;}
@@ -269,6 +270,7 @@
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
       <button id="reassembleBtn" class="btn">⊞ In Block legen</button>
       <button id="saveBtn" class="btn">💾 Speichern</button>
+      <span id="currentProjectLabel" class="current-project-label"></span>
       <button id="loadBtn" class="btn">🗂️ Media</button>
 
       <div class="export-wrap">
@@ -306,6 +308,7 @@
     <div class="modal-header">
       <h3>Media</h3>
       <div style="display:flex;align-items:center;gap:8px;">
+        <button id="newCollageBtn" class="btn btn-gold" style="font-size:12.5px;padding:7px 11px;">+ Neue Collage</button>
         <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
         <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
       </div>
@@ -336,7 +339,11 @@
   const fileInput = document.getElementById('fileInput');
 
   let globalTilt = 0;
-  const state = { tiles: [], selectedIds: new Set(), dirHandles: [] };
+  const state = {
+    tiles: [], selectedIds: new Set(), dirHandles: [],
+    currentProjectId: null, currentProjectName: null, currentProjectFolder: null, // the project "💾 Speichern" silently overwrites
+    pendingName: null, pendingFolder: null // set by "+ Neue Collage", consumed by the next save
+  };
   let boardScale = 1;
   let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
   let uid = 1;
@@ -1258,12 +1265,13 @@
     return 'Collage ' + date + ' ' + time;
   }
 
-  async function saveProjectAs(name, folder){
+  // Writes the current board as a project record under a specific id — used both for
+  // brand-new projects (fresh id) and for silently overwriting the currently open one
+  // (same id, so "💾 Speichern" never creates a duplicate once a project is established).
+  async function putProjectRecord(id, name, folder){
     const db = await openDB();
     const tx = db.transaction('projects', 'readwrite');
-    const store = tx.objectStore('projects');
-    const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-    store.put({
+    tx.objectStore('projects').put({
       id, name, folder: folder || '', savedAt: Date.now(), color: boardColor,
       // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
       // handle when available, otherwise just the filename), never a copy of the pixels.
@@ -1278,6 +1286,14 @@
     });
     await txDone(tx);
     db.close();
+  }
+
+  function updateCurrentProjectLabel(){
+    const el = document.getElementById('currentProjectLabel');
+    if (!el) return;
+    if (state.currentProjectId) el.textContent = '· ' + state.currentProjectName;
+    else if (state.pendingName) el.textContent = '· ' + state.pendingName + ' (neu)';
+    else el.textContent = '';
   }
 
   // Creates a project directly in the database from a set of {file, handle, dirId, relPath}
@@ -1394,6 +1410,12 @@
     viewZoom = 1;
     dragMode = 'move';
     if (record.color) setBoardColor(record.color);
+    state.currentProjectId = record.id;
+    state.currentProjectName = record.name;
+    state.currentProjectFolder = record.folder || '';
+    state.pendingName = null;
+    state.pendingFolder = null;
+    updateCurrentProjectLabel();
     updateModeBadge();
     render();
     return true;
@@ -1526,13 +1548,37 @@
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveBtn');
     const original = btn.textContent;
-    const folder = prompt('Ordner (optional, z. B. "Azoren") — leer lassen für keinen Ordner:', lastUsedFolder);
-    if (folder === null) return; // cancelled
-    const name = prompt('Name für diesen Stand:', defaultProjectName());
-    if (name === null) return; // cancelled
-    lastUsedFolder = folder.trim();
     try {
-      await saveProjectAs(name.trim() || defaultProjectName(), lastUsedFolder);
+      let id = state.currentProjectId;
+      let name = state.currentProjectName;
+      let folder = state.currentProjectFolder;
+
+      if (!id){
+        if (state.pendingName != null){
+          // came from "+ Neue Collage" — name/bin already chosen, nothing to ask
+          name = state.pendingName;
+          folder = state.pendingFolder || '';
+        } else {
+          // no project established yet (e.g. photos added without going through "+ Neue Collage") — ask once
+          const n = prompt('Name für diese Collage:', defaultProjectName());
+          if (n === null) return;
+          name = n.trim() || defaultProjectName();
+          const f = prompt('Bin (optional, z. B. "Azoren") — leer lassen für "Ohne Bin":', lastUsedFolder);
+          if (f === null) return;
+          folder = f.trim();
+        }
+        id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+        lastUsedFolder = folder;
+        if (folder) await ensureBinExists(folder);
+        state.currentProjectId = id;
+        state.currentProjectName = name;
+        state.currentProjectFolder = folder;
+        state.pendingName = null;
+        state.pendingFolder = null;
+      }
+
+      await putProjectRecord(id, name, folder);
+      updateCurrentProjectLabel();
       btn.textContent = '✓ Gespeichert';
     } catch(err){
       console.error(err);
@@ -1604,6 +1650,12 @@
     delBtnEl.addEventListener('click', async () => {
       if (!confirm('„' + p.name + '“ endgültig löschen?')) return;
       await deleteProjectById(p.id);
+      if (state.currentProjectId === p.id){
+        state.currentProjectId = null;
+        state.currentProjectName = null;
+        state.currentProjectFolder = null;
+        updateCurrentProjectLabel();
+      }
       openLoadModal();
     });
 
@@ -1682,6 +1734,7 @@
         draggedProjectId = null;
         if (!isReal) await ensureBinExists(bin.name);
         await updateProjectFolder(pid, bin.name);
+        if (state.currentProjectId === pid){ state.currentProjectFolder = bin.name; updateCurrentProjectLabel(); }
         openLoadModal();
         return;
       }
@@ -1749,6 +1802,7 @@
         const pid = draggedProjectId;
         draggedProjectId = null;
         await updateProjectFolder(pid, '');
+        if (state.currentProjectId === pid){ state.currentProjectFolder = ''; updateCurrentProjectLabel(); }
         openLoadModal();
       }
     });
@@ -1756,6 +1810,40 @@
   }
 
   function closeLoadModal(){ loadModalOverlay.style.display = 'none'; }
+
+  document.getElementById('newCollageBtn').addEventListener('click', async () => {
+    if (state.tiles.length){
+      const warn = state.currentProjectId
+        ? 'Neue Collage anlegen? Die Fläche wird geleert (der aktuelle Stand ist unter „' + state.currentProjectName + '“ gespeichert, sofern du zuletzt gesichert hast).'
+        : 'Neue Collage anlegen? Die Fläche wird geleert — nicht gespeicherte Fotos gehen dabei verloren.';
+      if (!confirm(warn)) return;
+    }
+
+    const name = prompt('Name der neuen Collage:', defaultProjectName());
+    if (name === null) return;
+    const finalName = name.trim() || defaultProjectName();
+    const folder = prompt('Bin für diese Collage (optional, z. B. "Azoren") — leer lassen für „Ohne Bin“:', lastUsedFolder);
+    if (folder === null) return;
+    const finalFolder = folder.trim();
+    lastUsedFolder = finalFolder;
+
+    state.tiles = [];
+    state.selectedIds = new Set();
+    state.dirHandles = [];
+    maxZ = 0; viewZoom = 1; dragMode = 'move';
+    blockCursor = { x:0, y:0, rowH:0 };
+    updateModeBadge();
+    setBoardColor('#121214');
+
+    state.currentProjectId = null;
+    state.currentProjectName = null;
+    state.currentProjectFolder = null;
+    state.pendingName = finalName;
+    state.pendingFolder = finalFolder;
+    updateCurrentProjectLabel();
+    render();
+    closeLoadModal();
+  });
 
   document.getElementById('addBinBtn').addEventListener('click', async () => {
     const name = prompt('Name für den neuen Bin (z. B. "Azoren"):');
