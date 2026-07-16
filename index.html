@@ -185,6 +185,10 @@
   .project-meta{color:var(--text-dim);font-size:12px;margin-top:2px;}
   .project-actions{display:flex;gap:6px;flex-shrink:0;}
   .project-actions .btn{padding:7px 11px;font-size:12.5px;}
+  .folder-header{
+    padding:14px 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:.3px;
+    color:var(--gold-soft);text-transform:uppercase;
+  }
 
   .handle{
     position:absolute;display:flex;align-items:center;justify-content:center;
@@ -228,7 +232,7 @@
         <input type="color" id="bgColorInput" value="#121214">
         <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
       </div>
-      <label class="btn btn-gold" for="fileInput">＋ Fotos</label>
+      <button id="addPhotosBtn" class="btn btn-gold">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
       <button id="relinkBtn" class="btn" title="Fehlende Bilder wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
@@ -283,6 +287,7 @@
 
 <script>
 (function(){
+  console.log('%cJoiner build: 2026-07-16-streaming-v2 (Streaming Backup/Restore)', 'color:#d4af37;font-weight:bold;');
   const ROW_HEIGHT = 340;   // board units — height every photo gets in the block layout
   const ROW_GAP = 10;       // gap between photos
   const BLOCK_WRAP_WIDTH = 1250; // wrap to a new row once a row reaches roughly this width — keeps photos as a block, not one long strip
@@ -443,7 +448,7 @@
         el.classList.add('broken');
         renderBrokenFill(el, tile);
       };
-      img.src = tile.url;
+      if (!tile.broken) img.src = tile.url;
       el.appendChild(img);
 
       if (tile.broken){
@@ -502,19 +507,34 @@
   }
 
   // relink one specific tile via a single-file picker
-  function relinkSingleTile(tile){
+  async function relinkSingleTile(tile){
+    if (window.showOpenFilePicker){
+      let handles;
+      try {
+        handles = await window.showOpenFilePicker({
+          multiple: false,
+          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
+        });
+      } catch(err){ return; } // cancelled
+      try {
+        const file = await handles[0].getFile();
+        applyRelink(tile, file, handles[0]);
+      } catch(err){ console.warn(err); }
+      return;
+    }
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.addEventListener('change', () => {
-      if (input.files && input.files[0]) applyRelink(tile, input.files[0]);
+      if (input.files && input.files[0]) applyRelink(tile, input.files[0], null);
     });
     input.click();
   }
 
-  function applyRelink(tile, file){
+  function applyRelink(tile, file, handle){
     try { URL.revokeObjectURL(tile.url); } catch(err){}
     tile.blob = file;
+    tile.handle = handle || tile.handle || null;
     tile.filename = file.name;
     tile.url = URL.createObjectURL(file);
     tile.broken = false;
@@ -524,38 +544,29 @@
   // batch relink: pick many files at once, match to broken tiles by filename
   const relinkBtn = document.getElementById('relinkBtn');
   const relinkInput = document.getElementById('relinkInput');
-  relinkBtn.addEventListener('click', () => {
-    const missing = brokenTiles();
-    if (!missing.length){
-      alert('Aktuell fehlt kein Bild — alle Fotos sind geladen.\n\nDieser Knopf wird gebraucht, sobald ein Bild nicht mehr auffindbar ist (z. B. nach dem Umzug auf eine neue Adresse). Dann erscheint hier ein "Datei wählen"-Button direkt auf der Kachel.');
-      return;
-    }
-    relinkInput.click();
-  });
-  relinkInput.addEventListener('change', () => {
-    const files = Array.from(relinkInput.files || []);
-    relinkInput.value = '';
-    if (!files.length) return;
+
+  function applyBatchRelink(items){ // items: [{file, handle}]
+    if (!items.length) return;
     const missing = brokenTiles();
     if (!missing.length) return;
 
     const norm = s => (s || '').toLowerCase().trim();
     const stem = s => norm(s).replace(/\.[a-z0-9]+$/, '');
     let matchedCount = 0;
-    const usedFiles = new Set();
+    const used = new Set();
 
     missing.forEach(tile => {
       // exact filename match first, then match ignoring extension
-      let match = files.find(f => !usedFiles.has(f) && norm(f.name) === norm(tile.filename));
-      if (!match) match = files.find(f => !usedFiles.has(f) && stem(f.name) === stem(tile.filename));
-      if (match){ usedFiles.add(match); applyRelink(tile, match); matchedCount++; }
+      let match = items.find(it => !used.has(it) && norm(it.file.name) === norm(tile.filename));
+      if (!match) match = items.find(it => !used.has(it) && stem(it.file.name) === stem(tile.filename));
+      if (match){ used.add(match); applyRelink(tile, match.file, match.handle); matchedCount++; }
     });
 
     // if exactly one file selected and exactly one tile still missing, assume it belongs together
     const stillMissing = brokenTiles();
-    const leftoverFiles = files.filter(f => !usedFiles.has(f));
-    if (stillMissing.length === 1 && leftoverFiles.length === 1){
-      applyRelink(stillMissing[0], leftoverFiles[0]);
+    const leftover = items.filter(it => !used.has(it));
+    if (stillMissing.length === 1 && leftover.length === 1){
+      applyRelink(stillMissing[0], leftover[0].file, leftover[0].handle);
       matchedCount++;
     }
 
@@ -563,6 +574,36 @@
     let msg = matchedCount + ' Bild' + (matchedCount === 1 ? '' : 'er') + ' wieder verknüpft.';
     if (remaining) msg += '\n' + remaining + ' fehlen noch — Dateiname stimmte nicht überein. Nutze den 🔗-Knopf direkt auf der Kachel, um einzeln nachzubessern.';
     alert(msg);
+  }
+
+  relinkBtn.addEventListener('click', async () => {
+    const missing = brokenTiles();
+    if (!missing.length){
+      alert('Aktuell fehlt kein Bild — alle Fotos sind geladen.\n\nDieser Knopf wird gebraucht, sobald ein Bild nicht mehr auffindbar ist (z. B. nach dem Umzug auf eine neue Adresse). Dann erscheint hier ein "Datei wählen"-Button direkt auf der Kachel.');
+      return;
+    }
+    if (window.showOpenFilePicker){
+      let handles;
+      try {
+        handles = await window.showOpenFilePicker({
+          multiple: true,
+          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
+        });
+      } catch(err){ return; } // cancelled
+      const items = [];
+      for (const h of handles){
+        try { items.push({ file: await h.getFile(), handle: h }); }
+        catch(err){ console.warn(err); }
+      }
+      applyBatchRelink(items);
+    } else {
+      relinkInput.click();
+    }
+  });
+  relinkInput.addEventListener('change', () => {
+    const files = Array.from(relinkInput.files || []).map(f => ({ file: f, handle: null }));
+    relinkInput.value = '';
+    applyBatchRelink(files);
   });
 
   // ---------- Drag / Rotate / Resize ----------
@@ -878,15 +919,16 @@
     });
   }
 
-  async function addFiles(fileList){
-    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
-    if (!files.length) return;
+  async function addFilesCommon(items){ // items: [{file, handle}]
+    const usable = items.filter(it => it.file && it.file.type.startsWith('image/'));
+    if (!usable.length) return;
     const newTiles = [];
-    for (const file of files){
+    for (const { file, handle } of usable){
       const url = URL.createObjectURL(file);
       try {
         const dims = await loadImageDims(url);
-        newTiles.push({ id: 't' + (uid++), url, blob: file, filename: file.name, naturalW: dims.w, naturalH: dims.h,
+        newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null, filename: file.name,
+                         naturalW: dims.w, naturalH: dims.h,
                          x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false });
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
@@ -908,6 +950,39 @@
     state.tiles.push(...newTiles);
     render();
   }
+
+  // classic <input type=file> path (Safari/Firefox, or drag&drop) — no persistent handle possible
+  async function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    await addFilesCommon(files.map(f => ({ file: f, handle: null })));
+  }
+
+  // File System Access API path (Chrome) — keeps a reusable handle so projects can
+  // reconnect to the original photo automatically next time, instead of needing a manual relink.
+  async function addFilesFromHandles(handles){
+    const items = [];
+    for (const h of handles){
+      try { items.push({ file: await h.getFile(), handle: h }); }
+      catch(err){ console.warn('Datei konnte nicht gelesen werden', err); }
+    }
+    await addFilesCommon(items);
+  }
+
+  const addPhotosBtn = document.getElementById('addPhotosBtn');
+  addPhotosBtn.addEventListener('click', async () => {
+    if (window.showOpenFilePicker){
+      let handles;
+      try {
+        handles = await window.showOpenFilePicker({
+          multiple: true,
+          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
+        });
+      } catch(err){ return; } // cancelled
+      addFilesFromHandles(handles);
+    } else {
+      fileInput.click();
+    }
+  });
 
   fileInput.addEventListener('change', e => {
     addFiles(e.target.files);
@@ -1072,16 +1147,21 @@
     return 'Collage ' + date + ' ' + time;
   }
 
-  async function saveProjectAs(name){
+  async function saveProjectAs(name, folder){
     const db = await openDB();
     const tx = db.transaction('projects', 'readwrite');
     const store = tx.objectStore('projects');
     const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
     store.put({
-      id, name, savedAt: Date.now(), color: boardColor,
-      tiles: state.tiles.map(t => ({ id:t.id, blob:t.blob, filename:t.filename || (t.blob && t.blob.name) || null,
-                                      x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
-                                      naturalW:t.naturalW, naturalH:t.naturalH }))
+      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor,
+      // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
+      // handle when available, otherwise just the filename), never a copy of the pixels.
+      // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
+      tiles: state.tiles.map(t => ({
+        id: t.id, filename: t.filename || (t.blob && t.blob.name) || null, handle: t.handle || null,
+        x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
+        naturalW:t.naturalW, naturalH:t.naturalH
+      }))
     });
     await txDone(tx);
     db.close();
@@ -1110,12 +1190,28 @@
     db.close();
     if (!record) return false;
 
-    state.tiles = record.tiles.map(r => ({
-      id: r.id, url: URL.createObjectURL(r.blob), blob: r.blob,
-      filename: (r.blob && r.blob.name) ? r.blob.name : (r.filename || null), broken: false,
-      naturalW: r.naturalW, naturalH: r.naturalH,
-      x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
-    }));
+    const tiles = [];
+    for (const r of record.tiles){
+      let blob = r.blob || null; // old-style saves from before lean storage still work directly
+      let broken = false;
+      if (!blob && r.handle){
+        try {
+          let perm = await r.handle.queryPermission({ mode: 'read' });
+          if (perm !== 'granted') perm = await r.handle.requestPermission({ mode: 'read' });
+          if (perm === 'granted') blob = await r.handle.getFile();
+          else broken = true;
+        } catch(err){ broken = true; }
+      } else if (!blob){
+        broken = true; // no embedded copy and no handle — needs a manual relink
+      }
+      tiles.push({
+        id: r.id, url: blob ? URL.createObjectURL(blob) : '', blob, handle: r.handle || null,
+        filename: r.filename || (blob && blob.name) || null, broken,
+        naturalW: r.naturalW, naturalH: r.naturalH,
+        x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
+      });
+    }
+    state.tiles = tiles;
     maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
     const nums = state.tiles.map(t => parseInt(t.id.replace('t',''), 10) || 0);
     uid = (nums.length ? Math.max(...nums) : 0) + 1;
@@ -1139,13 +1235,31 @@
     db.close();
   }
 
+  async function updateProjectFolder(id, folder){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
+    const record = await new Promise((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (record){ record.folder = folder; store.put(record); }
+    await txDone(tx);
+    db.close();
+  }
+
+  let lastUsedFolder = '';
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveBtn');
     const original = btn.textContent;
+    const folder = prompt('Ordner (optional, z. B. "Azoren") — leer lassen für keinen Ordner:', lastUsedFolder);
+    if (folder === null) return; // cancelled
     const name = prompt('Name für diesen Stand:', defaultProjectName());
     if (name === null) return; // cancelled
+    lastUsedFolder = folder.trim();
     try {
-      await saveProjectAs(name.trim() || defaultProjectName());
+      await saveProjectAs(name.trim() || defaultProjectName(), lastUsedFolder);
       btn.textContent = '✓ Gespeichert';
     } catch(err){
       console.error(err);
@@ -1169,7 +1283,26 @@
       return;
     }
     projectList.innerHTML = '';
+    const groups = new Map(); // folder name ('' = unfiled) -> projects[]
     projects.forEach(p => {
+      const key = p.folder || '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    });
+    const folderNames = [...groups.keys()].sort((a, b) => {
+      if (!a && b) return 1;   // unfiled goes last
+      if (a && !b) return -1;
+      return a.localeCompare(b, 'de');
+    });
+
+    folderNames.forEach(folder => {
+      if (folder){
+        const header = document.createElement('div');
+        header.className = 'folder-header';
+        header.textContent = '📁 ' + folder;
+        projectList.appendChild(header);
+      }
+      groups.get(folder).forEach(p => {
       const row = document.createElement('div');
       row.className = 'project-row';
 
@@ -1186,6 +1319,17 @@
 
       const actions = document.createElement('div');
       actions.className = 'project-actions';
+
+      const folderBtnEl = document.createElement('button');
+      folderBtnEl.className = 'btn btn-ghost';
+      folderBtnEl.textContent = '📁';
+      folderBtnEl.title = 'In Ordner verschieben';
+      folderBtnEl.addEventListener('click', async () => {
+        const newFolder = prompt('Ordner für „' + p.name + '“ (leer lassen für keinen Ordner):', p.folder || '');
+        if (newFolder === null) return;
+        await updateProjectFolder(p.id, newFolder.trim());
+        openLoadModal();
+      });
 
       const loadBtnEl = document.createElement('button');
       loadBtnEl.className = 'btn btn-gold-outline';
@@ -1205,11 +1349,13 @@
         openLoadModal();
       });
 
+      actions.appendChild(folderBtnEl);
       actions.appendChild(loadBtnEl);
       actions.appendChild(delBtnEl);
       row.appendChild(info);
       row.appendChild(actions);
       projectList.appendChild(row);
+      });
     });
   }
 
@@ -1286,18 +1432,34 @@
         if (pi > 0) await writable.write(',');
         await writable.write('{"name":' + JSON.stringify(p.name) + ',"savedAt":' + (p.savedAt||0) + ',"color":' + JSON.stringify(p.color||null) + ',"tiles":[');
         const tiles = p.tiles || [];
+        let written = 0;
         for (let ti = 0; ti < tiles.length; ti++){
           const t = tiles[ti];
-          if (ti > 0) await writable.write(',');
-          const mime = t.blob ? t.blob.type : 'image/jpeg';
-          const filename = t.filename || (t.blob && t.blob.name) || null;
+          let blob = t.blob || null; // old-style saves already carry the actual photo
+          if (!blob && t.handle){
+            try {
+              let perm = await t.handle.queryPermission({ mode: 'read' });
+              if (perm !== 'granted') perm = await t.handle.requestPermission({ mode: 'read' });
+              if (perm === 'granted') blob = await t.handle.getFile();
+            } catch(err){ /* handled below as skipped */ }
+          }
+          if (!blob){
+            skipped++;
+            setBackupStatus('⚠ „' + (t.filename||t.id) + '“ nicht verknüpft — im Backup übersprungen');
+            await tick();
+            continue;
+          }
+          if (written > 0) await writable.write(',');
+          const mime = blob.type || 'image/jpeg';
+          const filename = t.filename || blob.name || null;
           const meta = { id:t.id, x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
                          naturalW:t.naturalW, naturalH:t.naturalH, filename, mime };
           let base64 = '';
-          try { base64 = await blobToBase64(t.blob); }
+          try { base64 = await blobToBase64(blob); }
           catch(err){ skipped++; }
           const metaStr = JSON.stringify(meta);
           await writable.write(metaStr.slice(0, -1) + ',"data":"data:' + mime + ';base64,' + base64 + '"}');
+          written++;
           setBackupStatus('Sichere „' + p.name + '“ — Foto ' + (ti+1) + '/' + tiles.length + ' (Projekt ' + (pi+1) + '/' + records.length + ')');
           await tick();
         }
