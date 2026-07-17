@@ -312,6 +312,8 @@
     <div class="modal-header">
       <h3>Media</h3>
       <div style="display:flex;align-items:center;gap:8px;">
+        <button id="videoExtractBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">🎬 Aus Video</button>
+        <input id="videoInput" type="file" accept="video/*" hidden>
         <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
         <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
       </div>
@@ -2012,6 +2014,126 @@
     state.pendingFolder = ''; // no bin yet — drag it into one from the Media panel whenever you like
     updateCurrentProjectLabel();
     render();
+  });
+
+  // ---------- Video → Standbilder ----------
+  function waitForEvent(el, evt){
+    return new Promise(resolve => { el.addEventListener(evt, resolve, { once: true }); });
+  }
+
+  async function extractFramesFromVideo(file, stepSeconds, onProgress){
+    const video = document.createElement('video');
+    video.style.display = 'none';
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    document.body.appendChild(video);
+    const url = URL.createObjectURL(file);
+    video.src = url;
+
+    try {
+      await Promise.race([
+        waitForEvent(video, 'loadedmetadata'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Video konnte nicht gelesen werden (Zeitüberschreitung).')), 15000))
+      ]);
+      const duration = video.duration;
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!duration || !isFinite(duration) || !vw || !vh) throw new Error('Video-Metadaten (Länge/Größe) konnten nicht gelesen werden.');
+
+      const canvas = document.createElement('canvas');
+      canvas.width = vw; canvas.height = vh;
+      const ctx = canvas.getContext('2d');
+      const baseName = (file.name || 'video').replace(/\.[a-z0-9]+$/i, '');
+
+      const files = [];
+      let t = 0, idx = 0;
+      while (t < duration){
+        video.currentTime = Math.min(t, Math.max(0, duration - 0.05));
+        await Promise.race([
+          waitForEvent(video, 'seeked'),
+          new Promise(r => setTimeout(r, 2000)) // don't hang forever on a stubborn seek
+        ]);
+        ctx.drawImage(video, 0, 0, vw, vh);
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+        if (blob){
+          idx++;
+          files.push(new File([blob], baseName + '_' + String(idx).padStart(4,'0') + '.jpg', { type: 'image/jpeg' }));
+          if (onProgress) onProgress(idx, Math.ceil(duration / stepSeconds));
+        }
+        t += stepSeconds;
+        await tick();
+      }
+      return files;
+    } finally {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      video.remove();
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  const videoInput = document.getElementById('videoInput');
+  const videoExtractBtn = document.getElementById('videoExtractBtn');
+  videoExtractBtn.addEventListener('click', () => videoInput.click());
+  videoInput.addEventListener('change', async () => {
+    const file = videoInput.files && videoInput.files[0];
+    videoInput.value = '';
+    if (!file) return;
+
+    const fpsStr = prompt('Bilder pro Sekunde des Videos (fps) — z. B. 25 für Broadcast-Material:', '25');
+    if (fpsStr === null) return;
+    const fps = parseFloat(fpsStr) || 25;
+
+    const everyStr = prompt('Jedes wievielte Bild als Standbild? (z. B. 12 = alle 12 Frames ein Foto):', '12');
+    if (everyStr === null) return;
+    const everyN = Math.max(1, parseInt(everyStr, 10) || 12);
+    const stepSeconds = everyN / fps;
+
+    const nameGuess = file.name.replace(/\.[a-z0-9]+$/i, '') + ' — Standbilder';
+    const projectName = prompt('Name für das neue Projekt mit den Standbildern:', nameGuess);
+    if (projectName === null) return;
+
+    setBackupStatus('Lese Video-Länge…');
+    videoExtractBtn.disabled = true;
+    try {
+      // quick metadata peek just to give an upfront estimate and a sanity check before committing
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.muted = true;
+      const probeUrl = URL.createObjectURL(file);
+      probe.src = probeUrl;
+      await Promise.race([ waitForEvent(probe, 'loadedmetadata'), new Promise((_,r)=>setTimeout(()=>r(),8000)) ]);
+      const estCount = probe.duration && isFinite(probe.duration) ? Math.ceil(probe.duration / stepSeconds) : null;
+      URL.revokeObjectURL(probeUrl);
+      probe.remove();
+
+      if (estCount != null){
+        const warn = estCount > 250 ? ('\n\n⚠️ Das sind sehr viele Standbilder — das kann eine Weile dauern und viel Platz brauchen.') : '';
+        if (!confirm('Video ist ca. ' + Math.round(probe.duration) + 's lang → ergibt etwa ' + estCount + ' Standbilder (alle ' + stepSeconds.toFixed(2) + 's).' + warn + '\n\nFortfahren?')) {
+          setBackupStatus('');
+          return;
+        }
+      }
+
+      const files = await extractFramesFromVideo(file, stepSeconds, (done, total) => {
+        setBackupStatus('Extrahiere Standbilder … ' + done + (total ? ' / ' + total : ''));
+      });
+      if (!files.length){ alert('Es konnten keine Standbilder extrahiert werden.'); setBackupStatus(''); return; }
+
+      setBackupStatus('Lege Projekt an …');
+      const tileItems = files.map(f => ({ file: f, handle: null, dirId: null, relPath: null }));
+      const id = await saveProjectFromItems(projectName.trim() || nameGuess, '', tileItems, []);
+      setBackupStatus(id ? ('✓ ' + files.length + ' Standbilder in „' + (projectName.trim() || nameGuess) + '“ gespeichert.') : 'Fehlgeschlagen.');
+      setTimeout(() => setBackupStatus(''), 6000);
+      openLoadModal();
+    } catch(err){
+      console.error(err);
+      alert('Extraktion fehlgeschlagen: ' + err.message);
+      setBackupStatus('');
+    } finally {
+      videoExtractBtn.disabled = false;
+    }
   });
 
   document.getElementById('addBinBtn').addEventListener('click', async () => {
