@@ -2021,7 +2021,7 @@
     return new Promise(resolve => { el.addEventListener(evt, resolve, { once: true }); });
   }
 
-  async function extractFramesFromVideo(file, stepSeconds, onProgress){
+  async function extractFramesFromVideo(file, stepSeconds, destDirHandle, onProgress){
     const video = document.createElement('video');
     video.style.display = 'none';
     video.muted = true;
@@ -2045,7 +2045,7 @@
       const ctx = canvas.getContext('2d');
       const baseName = (file.name || 'video').replace(/\.[a-z0-9]+$/i, '');
 
-      const files = [];
+      const tileItems = []; // {file, handle, relPath} — real files on disk, not just in-memory blobs
       let t = 0, idx = 0;
       while (t < duration){
         video.currentTime = Math.min(t, Math.max(0, duration - 0.05));
@@ -2057,13 +2057,19 @@
         const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
         if (blob){
           idx++;
-          files.push(new File([blob], baseName + '_' + String(idx).padStart(4,'0') + '.jpg', { type: 'image/jpeg' }));
+          const filename = baseName + '_' + String(idx).padStart(4,'0') + '.jpg';
+          const fileHandle = await destDirHandle.getFileHandle(filename, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          const namedFile = new File([blob], filename, { type: 'image/jpeg' });
+          tileItems.push({ file: namedFile, handle: fileHandle, relPath: filename });
           if (onProgress) onProgress(idx, Math.ceil(duration / stepSeconds));
         }
         t += stepSeconds;
         await tick();
       }
-      return files;
+      return tileItems;
     } finally {
       video.pause();
       video.removeAttribute('src');
@@ -2081,6 +2087,11 @@
     videoInput.value = '';
     if (!file) return;
 
+    if (!window.showDirectoryPicker){
+      alert('Diese Funktion braucht die Dateisystem-Funktionen von aktuellem Chrome.');
+      return;
+    }
+
     const fpsStr = prompt('Bilder pro Sekunde des Videos (fps) — z. B. 25 für Broadcast-Material:', '25');
     if (fpsStr === null) return;
     const fps = parseFloat(fpsStr) || 25;
@@ -2093,6 +2104,11 @@
     const nameGuess = file.name.replace(/\.[a-z0-9]+$/i, '') + ' — Standbilder';
     const projectName = prompt('Name für das neue Projekt mit den Standbildern:', nameGuess);
     if (projectName === null) return;
+
+    alert('Wähle jetzt einen Ordner, in den die Standbilder als echte JPG-Dateien geschrieben werden (nicht nur in die App-Datenbank) — z. B. einen neuen Ordner auf dem Schreibtisch.');
+    let destDirHandle;
+    try { destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); }
+    catch(err){ return; } // cancelled
 
     setBackupStatus('Lese Video-Länge…');
     videoExtractBtn.disabled = true;
@@ -2110,21 +2126,22 @@
 
       if (estCount != null){
         const warn = estCount > 250 ? ('\n\n⚠️ Das sind sehr viele Standbilder — das kann eine Weile dauern und viel Platz brauchen.') : '';
-        if (!confirm('Video ist ca. ' + Math.round(probe.duration) + 's lang → ergibt etwa ' + estCount + ' Standbilder (alle ' + stepSeconds.toFixed(2) + 's).' + warn + '\n\nFortfahren?')) {
+        if (!confirm('Video ist ca. ' + Math.round(probe.duration) + 's lang → ergibt etwa ' + estCount + ' Standbilder (alle ' + stepSeconds.toFixed(2) + 's), gespeichert in „' + destDirHandle.name + '“.' + warn + '\n\nFortfahren?')) {
           setBackupStatus('');
           return;
         }
       }
 
-      const files = await extractFramesFromVideo(file, stepSeconds, (done, total) => {
-        setBackupStatus('Extrahiere Standbilder … ' + done + (total ? ' / ' + total : ''));
+      const tileItems = await extractFramesFromVideo(file, stepSeconds, destDirHandle, (done, total) => {
+        setBackupStatus('Extrahiere Standbilder … ' + done + (total ? ' / ' + total : '') + ' (schreibe nach „' + destDirHandle.name + '“)');
       });
-      if (!files.length){ alert('Es konnten keine Standbilder extrahiert werden.'); setBackupStatus(''); return; }
+      if (!tileItems.length){ alert('Es konnten keine Standbilder extrahiert werden.'); setBackupStatus(''); return; }
 
       setBackupStatus('Lege Projekt an …');
-      const tileItems = files.map(f => ({ file: f, handle: null, dirId: null, relPath: null }));
-      const id = await saveProjectFromItems(projectName.trim() || nameGuess, '', tileItems, []);
-      setBackupStatus(id ? ('✓ ' + files.length + ' Standbilder in „' + (projectName.trim() || nameGuess) + '“ gespeichert.') : 'Fehlgeschlagen.');
+      const dirId = registerDirHandle(destDirHandle, destDirHandle.name);
+      const linkedTileItems = tileItems.map(t => ({ file: t.file, handle: t.handle, dirId, relPath: t.relPath }));
+      const id = await saveProjectFromItems(projectName.trim() || nameGuess, '', linkedTileItems, [{ id: dirId, handle: destDirHandle, name: destDirHandle.name }]);
+      setBackupStatus(id ? ('✓ ' + tileItems.length + ' Standbilder in „' + destDirHandle.name + '“ gespeichert und mit „' + (projectName.trim() || nameGuess) + '“ verknüpft.') : 'Fehlgeschlagen.');
       setTimeout(() => setBackupStatus(''), 6000);
       openLoadModal();
     } catch(err){
