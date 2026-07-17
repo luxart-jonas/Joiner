@@ -83,12 +83,12 @@
 
   /* ---------- Tiles ---------- */
   .tile{
-    position:absolute;box-sizing:border-box;
+    position:absolute;box-sizing:border-box;overflow:hidden;
     box-shadow:0 4px 14px rgba(0,0,0,.5);
     cursor:grab;touch-action:none;user-select:none;
   }
   .tile:active{cursor:grabbing;}
-  .tile img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
+  .tile img{position:absolute;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
   .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
   .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
   .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
@@ -436,6 +436,19 @@
     return [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy]) => [cx + dx*cos - dy*sin, cy + dx*sin + dy*cos]);
   }
 
+  // Every tile keeps its own image scale + offset ("manual object-fit:cover") instead of
+  // relying on the browser's automatic centering — that's what lets a single-edge crop
+  // trim only the dragged side instead of re-centering and nibbling both sides equally.
+  // Freshly added photos get this set explicitly (0 offset = perfectly framed); this is
+  // the fallback for anything that doesn't have it yet (older saves, safety net).
+  function ensureCropDefaults(tile){
+    if (tile.imgScale != null && tile.imgOffsetX != null && tile.imgOffsetY != null) return;
+    const scale = Math.max(tile.w / tile.naturalW, tile.h / tile.naturalH);
+    tile.imgScale = scale;
+    tile.imgOffsetX = (tile.w - tile.naturalW * scale) / 2;
+    tile.imgOffsetY = (tile.h - tile.naturalH * scale) / 2;
+  }
+
   // Cmd/Ctrl+F: centers the whole composition so it has exactly the same margin on all four sides.
   function centerComposition(){
     if (!state.tiles.length) return;
@@ -503,7 +516,14 @@
         el.classList.add('broken');
         renderBrokenFill(el, tile);
       };
-      if (!tile.broken) img.src = tile.url;
+      if (!tile.broken){
+        img.src = tile.url;
+        ensureCropDefaults(tile);
+        img.style.left = tile.imgOffsetX + 'px';
+        img.style.top = tile.imgOffsetY + 'px';
+        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
+        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
+      }
       el.appendChild(img);
 
       if (tile.broken){
@@ -596,13 +616,22 @@
     input.click();
   }
 
-  function applyRelink(tile, file, handle){
+  async function applyRelink(tile, file, handle){
     try { URL.revokeObjectURL(tile.url); } catch(err){}
     tile.blob = file;
     tile.handle = handle || tile.handle || null;
     tile.filename = file.name;
     tile.url = URL.createObjectURL(file);
     tile.broken = false;
+    try {
+      const dims = await loadImageDims(tile.url);
+      tile.naturalW = dims.w;
+      tile.naturalH = dims.h;
+    } catch(err){ /* keep previous naturalW/H if the new file can't be measured */ }
+    // relinked file might have different dimensions than the original — start the
+    // framing fresh (centered cover-fit) rather than reusing a crop computed for a
+    // differently-sized image, which could look badly misaligned
+    tile.imgScale = null; tile.imgOffsetX = null; tile.imgOffsetY = null;
     render();
   }
 
@@ -894,12 +923,15 @@
 
   function startResize(e, tile, el){
     el.setPointerCapture(e.pointerId);
+    ensureCropDefaults(tile);
     const rect = el.getBoundingClientRect();
     const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
     const dist0 = Math.max(1, Math.hypot(e.clientX - cx, e.clientY - cy));
     const startW = tile.w, startH = tile.h;
+    const startScale = tile.imgScale, startOffX = tile.imgOffsetX, startOffY = tile.imgOffsetY;
     const centerBoardX = tile.x + tile.w/2, centerBoardY = tile.y + tile.h/2;
     let pushedUndo = false;
+    const img = el.querySelector('img');
 
     function move(ev){
       if (!pushedUndo){ pushUndo(); pushedUndo = true; }
@@ -910,10 +942,20 @@
       tile.h = startH * factor;
       tile.x = centerBoardX - tile.w/2;
       tile.y = centerBoardY - tile.h/2;
+      // scale the framing along with the box so whatever crop was set stays visually consistent
+      tile.imgScale = startScale * factor;
+      tile.imgOffsetX = startOffX * factor;
+      tile.imgOffsetY = startOffY * factor;
       el.style.width = tile.w + 'px';
       el.style.height = tile.h + 'px';
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
+      if (img){
+        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
+        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
+        img.style.left = tile.imgOffsetX + 'px';
+        img.style.top = tile.imgOffsetY + 'px';
+      }
     }
     function up(){
       el.removeEventListener('pointermove', move);
@@ -928,10 +970,13 @@
   // object-fit:cover this crops that side of the photo instead of scaling the whole tile.
   function startEdgeCrop(e, tile, el, edge){
     el.setPointerCapture(e.pointerId);
+    ensureCropDefaults(tile);
     const startX = tile.x, startY = tile.y, startW = tile.w, startH = tile.h;
+    const startOffX = tile.imgOffsetX, startOffY = tile.imgOffsetY;
     const startClientX = e.clientX, startClientY = e.clientY;
     const MIN_SIZE = 24;
     let pushedUndo = false;
+    const img = el.querySelector('img');
 
     function move(ev){
       if (!pushedUndo){ pushUndo(); pushedUndo = true; }
@@ -943,21 +988,29 @@
       const localDx = dx*cos - dy*sin;
       const localDy = dx*sin + dy*cos;
 
+      // trimming a side means: the box's edge on that side moves in, AND the image's
+      // offset shifts by exactly the same amount so its on-screen position doesn't move —
+      // that's what makes the crop happen ONLY on the dragged side, not both symmetrically.
       if (edge === 'top'){
         const newH = Math.max(MIN_SIZE, startH - localDy);
-        tile.y = startY + (startH - newH);
+        const trimmed = startH - newH;
+        tile.y = startY + trimmed;
         tile.h = newH;
+        tile.imgOffsetY = startOffY - trimmed;
       } else if (edge === 'bottom'){
         tile.h = Math.max(MIN_SIZE, startH + localDy);
       } else if (edge === 'left'){
         const newW = Math.max(MIN_SIZE, startW - localDx);
-        tile.x = startX + (startW - newW);
+        const trimmed = startW - newW;
+        tile.x = startX + trimmed;
         tile.w = newW;
+        tile.imgOffsetX = startOffX - trimmed;
       } else if (edge === 'right'){
         tile.w = Math.max(MIN_SIZE, startW + localDx);
       }
       el.style.left = tile.x + 'px'; el.style.top = tile.y + 'px';
       el.style.width = tile.w + 'px'; el.style.height = tile.h + 'px';
+      if (img){ img.style.left = tile.imgOffsetX + 'px'; img.style.top = tile.imgOffsetY + 'px'; }
     }
     function up(){
       el.removeEventListener('pointermove', move);
@@ -1078,6 +1131,7 @@
         blockCursor.x = 0; blockCursor.rowH = 0;
       }
       t.w = w; t.h = h; t.x = blockCursor.x; t.y = blockCursor.y; t.rot = 0; t.z = ++maxZ;
+      t.imgScale = scale; t.imgOffsetX = 0; t.imgOffsetY = 0; // perfectly framed, no crop yet
       blockCursor.x += w + ROW_GAP;
       blockCursor.rowH = Math.max(blockCursor.rowH, h);
     });
@@ -1298,10 +1352,13 @@
         ctx.shadowOffsetY = 3 * RES;
 
         const iw = tile.w * RES, ih = tile.h * RES;
-        // object-fit: cover
-        const scale = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
-        const sw = iw/scale, sh = ih/scale;
-        const sx = (img.naturalWidth - sw)/2, sy = (img.naturalHeight - sh)/2;
+        ensureCropDefaults(tile);
+        // read exactly the source rectangle that's visible on screen for this tile's
+        // current crop/offset — keeps the export pixel-identical to what's shown live
+        const sx = -tile.imgOffsetX / tile.imgScale;
+        const sy = -tile.imgOffsetY / tile.imgScale;
+        const sw = tile.w / tile.imgScale;
+        const sh = tile.h / tile.imgScale;
         ctx.drawImage(img, sx, sy, sw, sh, -iw/2, -ih/2, iw, ih);
         ctx.restore();
       });
@@ -1373,7 +1430,10 @@
         id: t.id, filename: t.filename || (t.blob && t.blob.name) || null,
         handle: t.handle || null, dirId: t.dirId != null ? t.dirId : null, relPath: t.relPath || null,
         x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
-        naturalW:t.naturalW, naturalH:t.naturalH
+        naturalW:t.naturalW, naturalH:t.naturalH,
+        imgScale: t.imgScale != null ? t.imgScale : null,
+        imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
+        imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null
       }))
     });
     await txDone(tx);
@@ -1409,7 +1469,8 @@
       tiles.push({
         id: 't' + (uid++), filename: it.file.name, handle: it.handle || null,
         dirId: it.dirId != null ? it.dirId : null, relPath: it.relPath || null,
-        x, y, w, h, rot: 0, z: ++z, naturalW: dims.w, naturalH: dims.h
+        x, y, w, h, rot: 0, z: ++z, naturalW: dims.w, naturalH: dims.h,
+        imgScale: scale, imgOffsetX: 0, imgOffsetY: 0
       });
       x += w + ROW_GAP;
       rowH = Math.max(rowH, h);
@@ -1488,6 +1549,9 @@
         dirId: r.dirId != null ? r.dirId : null, relPath: r.relPath || null,
         filename: r.filename || (blob && blob.name) || null, broken,
         naturalW: r.naturalW, naturalH: r.naturalH,
+        imgScale: r.imgScale != null ? r.imgScale : null,
+        imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : null,
+        imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : null,
         x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
       });
     }
