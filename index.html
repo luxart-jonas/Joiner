@@ -91,6 +91,7 @@
   .tile img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
   .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
   .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
+  .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
 
   .marquee{
     position:fixed;display:none;border:1px dashed var(--gold);
@@ -231,6 +232,11 @@
   .rotate-handle{top:-38px;left:50%;transform:translateX(-50%);cursor:grab;}
   .rotate-handle:active{cursor:grabbing;}
   .resize-handle{bottom:-14px;right:-14px;cursor:nwse-resize;font-size:12px;}
+  .crop-handle{width:22px;height:22px;font-size:10px;background:#7ed9a8;color:#0d3323;border-color:var(--mat);}
+  .crop-top{top:-11px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
+  .crop-bottom{bottom:-11px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
+  .crop-left{left:-11px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
+  .crop-right{right:-11px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
 
   .stage.dragover .board-frame::after{
     content:'Fotos hier ablegen';
@@ -294,7 +300,7 @@
     <div class="viewport" id="viewport">
       <div class="board-frame" id="boardFrame">
         <div class="board" id="board">
-          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
+          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
         </div>
       </div>
     </div>
@@ -313,7 +319,8 @@
     <div class="media-dropzone" id="mediaDropzone">Ordner mit Fotos hierher ziehen, um sie als neues Projekt hinzuzufügen</div>
     <div class="modal-body" id="projectList"></div>
     <div class="modal-footer">
-      <button id="relinkBtn" class="btn" title="Fehlende Bilder der aktuell offenen Collage wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen</button>
+      <button id="relinkBtn" class="btn" title="Fehlende Bilder der aktuell offenen Collage wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen (offene Collage)</button>
+      <button id="relinkAllBtn" class="btn" title="Ein oder mehrere Collagen ankreuzen (oder keine = alle mit fehlenden Fotos), dann einen übergeordneten Ordner wählen — die App durchsucht ihn komplett, auch alle Unterordner, und verknüpft alles, was sie per Dateiname findet.">🔍 Verknüpfen (mehrere, Ordner durchsuchen)</button>
       <button id="backupBtn" class="btn btn-gold-outline">⬇️ Alle sichern (Backup-Datei)</button>
       <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
       <button id="stripAllBtn" class="btn btn-ghost">🗑️ Alle doppelten Kopien entfernen</button>
@@ -346,11 +353,35 @@
   let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
   let uid = 1;
   let maxZ = 0;
-  let dragMode = 'move'; // 'move' | 'rotate' — toggled with R, for trackpad users who can't hold Alt while dragging
+  let dragMode = 'move'; // 'move' | 'rotate' | 'crop' — toggled with R / S
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
   const modeBadge = document.getElementById('modeBadge');
   function updateModeBadge(){
-    modeBadge.style.display = dragMode === 'rotate' ? 'inline-flex' : 'none';
+    if (dragMode === 'rotate'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '🔄 Drehmodus — R zum Beenden'; }
+    else if (dragMode === 'crop'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '✂️ Schneidemodus — Kante ziehen · S zum Beenden'; }
+    else modeBadge.style.display = 'none';
+  }
+
+  // ---------- Undo (Cmd/Strg+Z, 5 steps) ----------
+  const undoStack = [];
+  const UNDO_LIMIT = 5;
+  function pushUndo(){
+    undoStack.push({
+      tiles: state.tiles.map(t => ({ ...t })),
+      boardColor
+    });
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
+  function performUndo(){
+    if (!undoStack.length) return;
+    const snap = undoStack.pop();
+    state.tiles = snap.tiles.map(t => ({ ...t }));
+    state.selectedIds = new Set();
+    if (snap.boardColor) setBoardColor(snap.boardColor);
+    maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
+    dragMode = 'move';
+    updateModeBadge();
+    render();
   }
 
   function rand(min,max){ return min + Math.random()*(max-min); }
@@ -391,7 +422,7 @@
     return maxX + BOARD_MARGIN;
   }
   function boardHeight(){
-    let maxY = state.tiles.length ? 200 : 620; // bigger empty canvas so the help text fits inside it
+    let maxY = state.tiles.length ? 200 : 660; // bigger empty canvas so the help text fits inside it
     state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
     return maxY + BOARD_MARGIN;
   }
@@ -453,7 +484,9 @@
     state.tiles.forEach(tile => {
       const isSelected = state.selectedIds.has(tile.id);
       const el = document.createElement('div');
-      el.className = 'tile' + (isSelected ? ' selected' : '') + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '');
+      el.className = 'tile' + (isSelected ? ' selected' : '')
+        + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '')
+        + (isSelected && dragMode === 'crop' ? ' crop-mode' : '');
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
       el.style.width = tile.w + 'px';
@@ -484,15 +517,25 @@
         del.textContent = '×';
         el.appendChild(del);
 
-        const rot = document.createElement('div');
-        rot.className = 'handle rotate-handle';
-        rot.textContent = '⟳';
-        el.appendChild(rot);
+        if (dragMode === 'crop'){
+          ['top','right','bottom','left'].forEach(edge => {
+            const h = document.createElement('div');
+            h.className = 'handle crop-handle crop-' + edge;
+            h.dataset.edge = edge;
+            h.textContent = '✂';
+            el.appendChild(h);
+          });
+        } else {
+          const rot = document.createElement('div');
+          rot.className = 'handle rotate-handle';
+          rot.textContent = '⟳';
+          el.appendChild(rot);
 
-        const res = document.createElement('div');
-        res.className = 'handle resize-handle';
-        res.textContent = '⤡';
-        el.appendChild(res);
+          const res = document.createElement('div');
+          res.className = 'handle resize-handle';
+          res.textContent = '⤡';
+          el.appendChild(res);
+        }
       }
 
       el.addEventListener('pointerdown', e => onTilePointerDown(e, tile, el));
@@ -659,6 +702,7 @@
 
     if (cls.contains('rotate-handle')) { startRotateGroup(e, tile); return; }
     if (cls.contains('resize-handle')) { startResize(e, tile, el); return; }
+    if (cls.contains('crop-handle')) { startEdgeCrop(e, tile, el, e.target.dataset.edge); return; }
 
     if (e.altKey || dragMode === 'rotate'){ startRotateGroup(e, tile); return; }
     startDragGroup(e, tile);
@@ -716,10 +760,17 @@
       centerComposition();
       return;
     }
+    // Cmd/Ctrl + Z: undo (last 5 steps)
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){
+      e.preventDefault();
+      performUndo();
+      return;
+    }
     // V / H (no modifier): move the active selection one step forward / backward
     if (!e.metaKey && !e.ctrlKey && !e.altKey && state.selectedIds.size){
       if (e.key === 'v' || e.key === 'V'){
         e.preventDefault();
+        pushUndo();
         [...state.tiles].filter(t => state.selectedIds.has(t.id))
           .sort((a,b) => b.z - a.z).forEach(bringForwardOneStep);
         render();
@@ -727,6 +778,7 @@
       }
       if (e.key === 'h' || e.key === 'H'){
         e.preventDefault();
+        pushUndo();
         [...state.tiles].filter(t => state.selectedIds.has(t.id))
           .sort((a,b) => a.z - b.z).forEach(bringBackwardOneStep);
         render();
@@ -735,6 +787,13 @@
       if (e.key === 'r' || e.key === 'R'){
         e.preventDefault();
         dragMode = dragMode === 'rotate' ? 'move' : 'rotate';
+        updateModeBadge();
+        render();
+        return;
+      }
+      if (e.key === 's' || e.key === 'S'){
+        e.preventDefault();
+        dragMode = dragMode === 'crop' ? 'move' : 'crop';
         updateModeBadge();
         render();
         return;
@@ -764,8 +823,10 @@
     if (!primaryEl) return;
     primaryEl.setPointerCapture(e.pointerId);
     const startClientX = e.clientX, startClientY = e.clientY;
+    let pushedUndo = false;
 
     function move(ev){
+      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const dx = (ev.clientX - startClientX) / boardScale;
       const dy = (ev.clientY - startClientY) / boardScale;
       tiles.forEach((t, i) => {
@@ -799,8 +860,10 @@
     const primaryEl = board.querySelector('[data-id="' + primaryTile.id + '"]');
     if (!primaryEl) return;
     primaryEl.setPointerCapture(e.pointerId);
+    let pushedUndo = false;
 
     function move(ev){
+      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const angle = Math.atan2(ev.clientY - pivotScreenY, ev.clientX - pivotScreenX) * 180/Math.PI;
       const delta = angle - startAngle;
       const rad = delta * Math.PI/180;
@@ -836,8 +899,10 @@
     const dist0 = Math.max(1, Math.hypot(e.clientX - cx, e.clientY - cy));
     const startW = tile.w, startH = tile.h;
     const centerBoardX = tile.x + tile.w/2, centerBoardY = tile.y + tile.h/2;
+    let pushedUndo = false;
 
     function move(ev){
+      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const dist = Math.hypot(ev.clientX - cx, ev.clientY - cy);
       let factor = dist / dist0;
       factor = Math.max(0.25, Math.min(4, factor));
@@ -859,7 +924,52 @@
     el.addEventListener('pointerup', up);
   }
 
+  // Shrinks the tile from ONE edge only (opposite edge stays fixed) — combined with
+  // object-fit:cover this crops that side of the photo instead of scaling the whole tile.
+  function startEdgeCrop(e, tile, el, edge){
+    el.setPointerCapture(e.pointerId);
+    const startX = tile.x, startY = tile.y, startW = tile.w, startH = tile.h;
+    const startClientX = e.clientX, startClientY = e.clientY;
+    const MIN_SIZE = 24;
+    let pushedUndo = false;
+
+    function move(ev){
+      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
+      const dx = (ev.clientX - startClientX) / boardScale;
+      const dy = (ev.clientY - startClientY) / boardScale;
+      // convert screen-space drag into the tile's own (possibly rotated) local space
+      const rad = -tile.rot * Math.PI/180;
+      const cos = Math.cos(rad), sin = Math.sin(rad);
+      const localDx = dx*cos - dy*sin;
+      const localDy = dx*sin + dy*cos;
+
+      if (edge === 'top'){
+        const newH = Math.max(MIN_SIZE, startH - localDy);
+        tile.y = startY + (startH - newH);
+        tile.h = newH;
+      } else if (edge === 'bottom'){
+        tile.h = Math.max(MIN_SIZE, startH + localDy);
+      } else if (edge === 'left'){
+        const newW = Math.max(MIN_SIZE, startW - localDx);
+        tile.x = startX + (startW - newW);
+        tile.w = newW;
+      } else if (edge === 'right'){
+        tile.w = Math.max(MIN_SIZE, startW + localDx);
+      }
+      el.style.left = tile.x + 'px'; el.style.top = tile.y + 'px';
+      el.style.width = tile.w + 'px'; el.style.height = tile.h + 'px';
+    }
+    function up(){
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      updateBoardScale();
+    }
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  }
+
   function deleteTiles(ids){
+    pushUndo();
     const idSet = new Set(ids);
     state.tiles = state.tiles.filter(t => !idSet.has(t.id));
     idSet.forEach(id => state.selectedIds.delete(id));
@@ -956,6 +1066,7 @@
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
     if (!newTiles.length) return;
+    pushUndo();
 
     // append new photos into the block layout, continuing in reading order right where
     // the last one left off — existing tiles (and any manual edits already made) are untouched
@@ -1018,6 +1129,30 @@
     for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i]);
     const fileHandle = await cur.getFileHandle(parts[parts.length - 1]);
     return { fileHandle, file: await fileHandle.getFile() };
+  }
+
+  // Deep recursive scan building filename → location index — used by the "several
+  // collages at once" relink, so it doesn't matter which subfolder a photo ended up in,
+  // as long as every photo has a distinct filename (true for camera/phone exports).
+  async function buildFilenameIndex(dirHandle, maxDepth, onProgress){
+    const index = new Map();
+    let count = 0;
+    async function walk(handle, depth, prefix){
+      for await (const entry of handle.values()){
+        if (entry.kind === 'file'){
+          if (IMAGE_EXT_RE.test(entry.name)){
+            const key = entry.name.toLowerCase().trim();
+            if (!index.has(key)) index.set(key, { relPath: prefix + entry.name, fileHandle: entry });
+            count++;
+            if (onProgress && count % 25 === 0) onProgress(count);
+          }
+        } else if (entry.kind === 'directory' && depth < maxDepth){
+          await walk(entry, depth + 1, prefix + entry.name + '/');
+        }
+      }
+    }
+    await walk(dirHandle, 0, '');
+    return index;
   }
 
   function registerDirHandle(handle, name){
@@ -1550,6 +1685,7 @@
   const collapsedBins = new Set(); // stays collapsed/expanded while the app is open
   let draggedProjectId = null;
   let draggedBinId = null;
+  const selectedProjectIds = new Set(); // checked in the tree, for bulk relink
 
   function buildProjectRow(p){
     const row = document.createElement('div');
@@ -1566,15 +1702,30 @@
 
     const info = document.createElement('div');
     info.className = 'project-info';
+    const titleRow = document.createElement('div');
+    titleRow.style.display = 'flex';
+    titleRow.style.alignItems = 'center';
+    titleRow.style.gap = '7px';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = selectedProjectIds.has(p.id);
+    checkbox.title = 'Für Mehrfach-Verknüpfen auswählen';
+    checkbox.addEventListener('click', e => e.stopPropagation());
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selectedProjectIds.add(p.id); else selectedProjectIds.delete(p.id);
+      updateRelinkAllLabel();
+    });
     const title = document.createElement('div');
     title.className = 'project-name';
     title.textContent = p.name;
+    titleRow.appendChild(checkbox);
+    titleRow.appendChild(title);
     const meta = document.createElement('div');
     meta.className = 'project-meta';
     const count = p.tiles.length;
     const isHeavy = p.tiles.some(t => t.blob);
     meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos') + (isHeavy ? ' · eingebettet (doppelt)' : '');
-    info.appendChild(title); info.appendChild(meta);
+    info.appendChild(titleRow); info.appendChild(meta);
 
     const actions = document.createElement('div');
     actions.className = 'project-actions';
@@ -1597,6 +1748,7 @@
     loadBtnEl.textContent = 'Laden';
     loadBtnEl.addEventListener('click', async () => {
       if (state.tiles.length && !confirm('Aktuellen Stand ersetzen mit „' + p.name + '“?')) return;
+      if (state.tiles.length) pushUndo();
       await loadProjectById(p.id);
       closeLoadModal();
     });
@@ -1780,6 +1932,7 @@
     if (name === null) return;
     const finalName = name.trim() || defaultProjectName();
 
+    if (state.tiles.length) pushUndo();
     state.tiles = [];
     state.selectedIds = new Set();
     state.dirHandles = [];
@@ -1808,9 +1961,92 @@
 
   document.getElementById('stripAllBtn').addEventListener('click', stripAllEmbeddedCopies);
 
+  const relinkAllBtn = document.getElementById('relinkAllBtn');
+  function updateRelinkAllLabel(){
+    relinkAllBtn.textContent = selectedProjectIds.size
+      ? '🔍 Verknüpfen (' + selectedProjectIds.size + ' ausgewählt)'
+      : '🔍 Verknüpfen (mehrere, Ordner durchsuchen)';
+  }
+  relinkAllBtn.addEventListener('click', relinkViaFolderSearch);
+
   document.getElementById('loadBtn').addEventListener('click', openLoadModal);
   document.getElementById('closeLoadModal').addEventListener('click', closeLoadModal);
   loadModalOverlay.addEventListener('pointerdown', e => { if (e.target === loadModalOverlay) closeLoadModal(); });
+
+  // Bulk relink: pick ONE parent folder, deep-scan it (any depth of subfolders), and
+  // match every missing photo across the chosen (or all-with-gaps) collages by filename.
+  async function relinkViaFolderSearch(){
+    if (!window.showDirectoryPicker){
+      alert('Diese Funktion braucht die Dateisystem-Funktionen von aktuellem Chrome.');
+      return;
+    }
+    const allProjects = await listProjects();
+    const targets = selectedProjectIds.size
+      ? allProjects.filter(p => selectedProjectIds.has(p.id))
+      : allProjects.filter(p => p.tiles.some(t => !t.blob));
+    if (!targets.length){
+      alert(selectedProjectIds.size
+        ? 'Die ausgewählten Collagen wurden nicht gefunden.'
+        : 'Nichts zu verknüpfen — keine Collage hat fehlende Fotos.');
+      return;
+    }
+
+    let topHandle;
+    try { topHandle = await window.showDirectoryPicker(); }
+    catch(err){ return; } // cancelled
+
+    relinkAllBtn.disabled = true;
+    setBackupStatus('Durchsuche „' + topHandle.name + '“ (inkl. Unterordner)…');
+    try {
+      const index = await buildFilenameIndex(topHandle, 12, count => {
+        setBackupStatus('Durchsuche „' + topHandle.name + '“ — ' + count + ' Bild(er) gefunden…');
+      });
+      setBackupStatus(index.size + ' Bild(er) in „' + topHandle.name + '“ gefunden. Verknüpfe…');
+
+      const dirId = registerDirHandle(topHandle, topHandle.name);
+      let totalMatched = 0, totalMissing = 0;
+
+      for (const p of targets){
+        let changed = false;
+        const newTiles = p.tiles.map(t => {
+          if (t.blob) return t; // embedded copy already fine, leave untouched
+          const key = (t.filename || '').toLowerCase().trim();
+          const hit = key ? index.get(key) : null;
+          if (!hit){ totalMissing++; return t; }
+          changed = true;
+          totalMatched++;
+          return { ...t, handle: null, dirId, relPath: hit.relPath };
+        });
+        if (changed){
+          const otherDirHandles = (p.dirHandles || []).filter(d => d.id !== dirId);
+          const db = await openDB();
+          const tx = db.transaction('projects', 'readwrite');
+          tx.objectStore('projects').put({
+            id: p.id, name: p.name, folder: p.folder || '', savedAt: p.savedAt, color: p.color,
+            dirHandles: [...otherDirHandles, { id: dirId, handle: topHandle, name: topHandle.name }],
+            tiles: newTiles
+          });
+          await txDone(tx);
+          db.close();
+          if (state.currentProjectId === p.id) await loadProjectById(p.id); // refresh the live board too, if it's open
+        }
+        setBackupStatus('Verknüpfe „' + p.name + '“ …');
+        await tick();
+      }
+
+      selectedProjectIds.clear();
+      updateRelinkAllLabel();
+      setBackupStatus('✓ ' + totalMatched + ' Foto(s) verknüpft über ' + targets.length + ' Collage(n).' + (totalMissing ? ' ' + totalMissing + ' weiterhin nicht gefunden.' : ''));
+      setTimeout(() => setBackupStatus(''), 6000);
+      openLoadModal();
+    } catch(err){
+      console.error(err);
+      alert('Verknüpfen fehlgeschlagen: ' + err.message);
+      setBackupStatus('');
+    } finally {
+      relinkAllBtn.disabled = false;
+    }
+  }
 
   // ---------- Dropping folders from Finder directly onto the Media panel ----------
   ['dragenter','dragover'].forEach(evt => mediaDropzone.addEventListener(evt, e => {
