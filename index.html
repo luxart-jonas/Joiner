@@ -2092,6 +2092,20 @@
       return;
     }
 
+    // ask for the destination folder FIRST, as immediately as possible after the file
+    // was picked — Chrome requires a fresh, unused "user gesture" for this dialog, and
+    // chaining several prompt()/alert() dialogs beforehand can burn through it, leaving
+    // this call silently doing nothing.
+    let destDirHandle;
+    try {
+      destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    } catch(err){
+      if (err && (err.name === 'AbortError')) return; // user cancelled the picker — nothing to report
+      console.error(err);
+      alert('Ordner-Auswahl fehlgeschlagen: ' + (err && err.message ? err.message : err) + '\n\nFalls das öfter passiert: versuch es nochmal — direkt nachdem der Datei-Dialog sich schließt, ohne Umwege.');
+      return;
+    }
+
     const fpsStr = prompt('Bilder pro Sekunde des Videos (fps) — z. B. 25 für Broadcast-Material:', '25');
     if (fpsStr === null) return;
     const fps = parseFloat(fpsStr) || 25;
@@ -2104,11 +2118,6 @@
     const nameGuess = file.name.replace(/\.[a-z0-9]+$/i, '') + ' — Standbilder';
     const projectName = prompt('Name für das neue Projekt mit den Standbildern:', nameGuess);
     if (projectName === null) return;
-
-    alert('Wähle jetzt einen Ordner, in den die Standbilder als echte JPG-Dateien geschrieben werden (nicht nur in die App-Datenbank) — z. B. einen neuen Ordner auf dem Schreibtisch.');
-    let destDirHandle;
-    try { destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); }
-    catch(err){ return; } // cancelled
 
     setBackupStatus('Lese Video-Länge…');
     videoExtractBtn.disabled = true;
