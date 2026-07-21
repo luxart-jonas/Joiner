@@ -621,10 +621,15 @@
   }
   // Called after any drag that could have moved a material tile: promotes it to a normal
   // workspace tile the moment its center leaves the tray, and refills the freed slot.
+  // A tile can only be selected/dragged/promoted if it's actually visible right now —
+  // off-page material tiles (still waiting in the queue) must never be touchable.
+  function isSelectable(tile){
+    return !tile.isMaterial || materialVisibleIds.has(tile.id);
+  }
   function checkMaterialPromotion(tiles){
     let changed = false;
     tiles.forEach(t => {
-      if (!t.isMaterial) return;
+      if (!t.isMaterial || !materialVisibleIds.has(t.id)) return; // never promote something off-page
       const cx = t.x + t.w/2, cy = t.y + t.h/2;
       if (cx > MATERIAL_ZONE_W || cy > MATERIAL_ZONE_H){
         t.isMaterial = false;
@@ -1196,7 +1201,7 @@
     // Cmd/Ctrl + A: select every photo
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a'){
       e.preventDefault();
-      state.selectedIds = new Set(state.tiles.map(t => t.id));
+      state.selectedIds = new Set(state.tiles.filter(isSelectable).map(t => t.id));
       render();
       return;
     }
@@ -1511,7 +1516,7 @@
         const y1 = (Math.min(startClientY, ev.clientY) - rect.top) / boardScale;
         const x2 = (Math.max(startClientX, ev.clientX) - rect.left) / boardScale;
         const y2 = (Math.max(startClientY, ev.clientY) - rect.top) / boardScale;
-        const hits = state.tiles.filter(t =>
+        const hits = state.tiles.filter(t => isSelectable(t) &&
           !(t.x + t.w < x1 || t.x > x2 || t.y + t.h < y1 || t.y > y2)
         );
         if (additive) hits.forEach(t => state.selectedIds.add(t.id));
@@ -1549,7 +1554,7 @@
         newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null,
                          dirId: dirId != null ? dirId : null, relPath: relPath || null,
                          filename: file.name, naturalW: dims.w, naturalH: dims.h,
-                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false,
+                         x:0, y:0, w:MATERIAL_SLOT, h:MATERIAL_SLOT, rot:0, z:0, broken:false,
                          isMaterial: true });
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
