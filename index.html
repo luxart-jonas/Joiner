@@ -110,6 +110,17 @@
   }
 
   .color-control{display:flex;align-items:center;gap:6px;}
+  .material-nav{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:var(--panel-2);}
+  .material-nav .btn{padding:6px 10px;}
+  .material-nav-label{font-size:12px;color:var(--text-dim);white-space:nowrap;}
+  .material-zone-bg{
+    position:absolute;border:1px dashed rgba(212,175,55,.4);border-radius:6px;
+    background:rgba(212,175,55,.04);pointer-events:none;
+  }
+  .material-zone-label{
+    position:absolute;top:6px;left:6px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;
+    color:rgba(212,175,55,.55);pointer-events:none;font-family:'Inter',sans-serif;
+  }
   .color-swatch{
     width:34px;height:34px;border-radius:6px;border:1px solid var(--border);
     cursor:pointer;display:block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
@@ -270,6 +281,12 @@
     <div class="actions">
       <span class="mode-badge" id="modeBadge">🔄 Drehmodus — R zum Beenden</span>
 
+      <div class="material-nav" id="materialNav" style="display:none;">
+        <button id="materialPrevBtn" class="btn" title="Vorherige 8 (Bild↑)">◀</button>
+        <span id="materialNavLabel" class="material-nav-label"></span>
+        <button id="materialNextBtn" class="btn" title="Nächste 8 (Bild↓)">▶</button>
+      </div>
+
       <button id="loadBtn" class="btn">🗂️ Laden</button>
 
       <button id="newCollageBtn" class="btn btn-gold-outline">+ Neue Collage</button>
@@ -310,7 +327,7 @@
     <div class="viewport" id="viewport">
       <div class="board-frame" id="boardFrame">
         <div class="board" id="board">
-          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Aktivieren, dann <b>P</b>: 2-3 Punkte an den Rand klicken,<br>schneidet im Uhrzeigersinn von Punkt 1 zu Punkt 2<br>(3. Punkt auf der Linie = Kurve, Punkte direkt anfassen<br>und ziehen zum Anpassen, Entf = Schritt zurück,<br>Shift+Entf = alle Schnitte dieses Fotos zurücksetzen,<br>nochmal P = fertig)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
+          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie landen im Material-Fach oben links (8 auf einmal, groß).<br>Herausziehen über den Rand = auf die Arbeitsfläche gesetzt,<br>die Lücke füllt sich automatisch auf.<br><b>Bild↑ / Bild↓</b> blättert durchs restliche Material.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Aktivieren, dann <b>P</b>: 2-3 Punkte an den Rand klicken,<br>schneidet im Uhrzeigersinn von Punkt 1 zu Punkt 2<br>(3. Punkt auf der Linie = Kurve, Punkte direkt anfassen<br>und ziehen zum Anpassen, Entf = Schritt zurück,<br>Shift+Entf = alle Schnitte dieses Fotos zurücksetzen,<br>nochmal P = fertig)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
         </div>
       </div>
     </div>
@@ -349,6 +366,17 @@
   const ROW_GAP = 10;       // gap between photos
   const BLOCK_WRAP_WIDTH = 1250; // wrap to a new row once a row reaches roughly this width — keeps photos as a block, not one long strip
 
+  // Material zone: a fixed-size 2x4 tray in the top-left corner that always shows up to 8
+  // not-yet-used photos, nice and big. Everything to the right/below stays free workspace.
+  // New photos land here first; dragging one out past the zone edge "uses" it and the tray
+  // refills automatically from whatever's still waiting.
+  const MATERIAL_COLS = 2, MATERIAL_ROWS = 4, MATERIAL_PAGE_SIZE = MATERIAL_COLS * MATERIAL_ROWS;
+  const MATERIAL_SLOT = 280, MATERIAL_GAP = 16;
+  const MATERIAL_ZONE_W = MATERIAL_COLS * MATERIAL_SLOT + (MATERIAL_COLS + 1) * MATERIAL_GAP;
+  const MATERIAL_ZONE_H = MATERIAL_ROWS * MATERIAL_SLOT + (MATERIAL_ROWS + 1) * MATERIAL_GAP;
+  let materialPage = 0;
+  let materialVisibleIds = new Set();
+
   const board = document.getElementById('board');
   const viewport = document.getElementById('viewport');
   const stage = document.getElementById('stage');
@@ -370,6 +398,12 @@
   let cutPoints = [];    // 0-3 points of the cut currently being placed (not yet committed)
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
   const modeBadge = document.getElementById('modeBadge');
+  const materialNav = document.getElementById('materialNav');
+  const materialNavLabel = document.getElementById('materialNavLabel');
+  const materialPrevBtn = document.getElementById('materialPrevBtn');
+  const materialNextBtn = document.getElementById('materialNextBtn');
+  materialPrevBtn.addEventListener('click', materialPrevPage);
+  materialNextBtn.addEventListener('click', materialNextPage);
   function updateModeBadge(){
     if (dragMode === 'rotate'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '🔄 Drehmodus — R zum Beenden'; }
     else if (dragMode === 'crop'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '✂️ Schneidemodus — Kante ziehen · S zum Beenden'; }
@@ -530,6 +564,63 @@
     el.addEventListener('pointerup', up);
   }
 
+  // ---------- Material zone (2x4 tray of unused photos, top-left) ----------
+  function materialTiles(){
+    return state.tiles.filter(t => t.isMaterial)
+      .sort((a,b) => (parseInt(a.id.replace('t',''),10)||0) - (parseInt(b.id.replace('t',''),10)||0));
+  }
+  // Positions the current page's material tiles into their fixed 2x4 slots and returns the
+  // set of tile ids that are actually visible right now (everything else stays un-rendered).
+  function layoutMaterialZone(){
+    const all = materialTiles();
+    const maxPage = Math.max(0, Math.ceil(all.length / MATERIAL_PAGE_SIZE) - 1);
+    if (materialPage > maxPage) materialPage = maxPage;
+    if (materialPage < 0) materialPage = 0;
+    const start = materialPage * MATERIAL_PAGE_SIZE;
+    const page = all.slice(start, start + MATERIAL_PAGE_SIZE);
+    const visible = new Set();
+    page.forEach((t, i) => {
+      const col = i % MATERIAL_COLS, row = Math.floor(i / MATERIAL_COLS);
+      t.x = MATERIAL_GAP + col * (MATERIAL_SLOT + MATERIAL_GAP);
+      t.y = MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
+      t.w = MATERIAL_SLOT; t.h = MATERIAL_SLOT; t.rot = 0;
+      visible.add(t.id);
+    });
+    materialVisibleIds = visible;
+    return { total: all.length, maxPage, visible };
+  }
+  function updateMaterialNav(){
+    const all = materialTiles();
+    const maxPage = Math.max(0, Math.ceil(all.length / MATERIAL_PAGE_SIZE) - 1);
+    const show = all.length > 0;
+    materialNav.style.display = show ? 'flex' : 'none';
+    if (!show) return;
+    const start = materialPage * MATERIAL_PAGE_SIZE + 1;
+    const end = Math.min(all.length, start + MATERIAL_PAGE_SIZE - 1);
+    materialNavLabel.textContent = 'Material ' + start + '–' + end + ' / ' + all.length;
+    materialPrevBtn.disabled = materialPage <= 0;
+    materialNextBtn.disabled = materialPage >= maxPage;
+  }
+  function materialPrevPage(){ if (materialPage > 0){ materialPage--; render(); } }
+  function materialNextPage(){
+    const maxPage = Math.max(0, Math.ceil(materialTiles().length / MATERIAL_PAGE_SIZE) - 1);
+    if (materialPage < maxPage){ materialPage++; render(); }
+  }
+  // Called after any drag that could have moved a material tile: promotes it to a normal
+  // workspace tile the moment its center leaves the tray, and refills the freed slot.
+  function checkMaterialPromotion(tiles){
+    let changed = false;
+    tiles.forEach(t => {
+      if (!t.isMaterial) return;
+      const cx = t.x + t.w/2, cy = t.y + t.h/2;
+      if (cx > MATERIAL_ZONE_W || cy > MATERIAL_ZONE_H){
+        t.isMaterial = false;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   // ---------- Undo (Cmd/Strg+Z, 5 steps) ----------
   const undoStack = [];
   const UNDO_LIMIT = 5;
@@ -584,14 +675,39 @@
     eyedropperBtn.style.display = 'none'; // not supported in this browser (e.g. Safari/Firefox)
   }
 
+  // Bounding box of only the placed (non-material) tiles — used for export, so the material
+  // tray never shows up as blank space in the exported image.
+  function workspaceBounds(){
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    state.tiles.forEach(t => {
+      if (t.isMaterial) return;
+      tileCorners(t).forEach(([px,py]) => {
+        minX = Math.min(minX, px); minY = Math.min(minY, py);
+        maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+      });
+    });
+    if (minX === Infinity){ minX = 0; minY = 0; maxX = 300; maxY = 200; }
+    const pad = BOARD_MARGIN / 2;
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    return { minX, minY, w: maxX - minX, h: maxY - minY };
+  }
+
   function boardWidth(){
     let maxX = state.tiles.length ? 300 : 560; // bigger empty canvas so the help text fits inside it
-    state.tiles.forEach(t => { maxX = Math.max(maxX, t.x + t.w); });
+    if (materialTiles().length) maxX = Math.max(maxX, MATERIAL_ZONE_W);
+    state.tiles.forEach(t => {
+      if (t.isMaterial && !materialVisibleIds.has(t.id)) return; // waiting off-page — ignore its (stale) size
+      maxX = Math.max(maxX, t.x + t.w);
+    });
     return maxX + BOARD_MARGIN;
   }
   function boardHeight(){
     let maxY = state.tiles.length ? 200 : 660; // bigger empty canvas so the help text fits inside it
-    state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
+    if (materialTiles().length) maxY = Math.max(maxY, MATERIAL_ZONE_H);
+    state.tiles.forEach(t => {
+      if (t.isMaterial && !materialVisibleIds.has(t.id)) return;
+      maxY = Math.max(maxY, t.y + t.h);
+    });
     return maxY + BOARD_MARGIN;
   }
 
@@ -658,11 +774,29 @@
 
 
   function render(){
+    const { visible: materialVisible } = layoutMaterialZone();
+    updateMaterialNav();
+
     emptyHint.style.display = state.tiles.length ? 'none' : 'block';
     board.querySelectorAll('.tile').forEach(el => el.remove());
+    board.querySelectorAll('.material-zone-bg, .material-zone-label').forEach(el => el.remove());
+
+    if (materialTiles().length){
+      const bg = document.createElement('div');
+      bg.className = 'material-zone-bg';
+      bg.style.left = '0px'; bg.style.top = '0px';
+      bg.style.width = MATERIAL_ZONE_W + 'px'; bg.style.height = MATERIAL_ZONE_H + 'px';
+      board.appendChild(bg);
+      const lbl = document.createElement('div');
+      lbl.className = 'material-zone-label';
+      lbl.textContent = 'Material';
+      board.appendChild(lbl);
+    }
+
     const onlySelected = state.selectedIds.size === 1 ? [...state.selectedIds][0] : null;
 
     state.tiles.forEach(tile => {
+      if (tile.isMaterial && !materialVisible.has(tile.id)) return; // waiting off-page, not shown right now
       const isSelected = state.selectedIds.has(tile.id);
       const isCutting = dragMode === 'cut' && tile.id === cutTileId;
       const el = document.createElement('div');
@@ -1038,6 +1172,9 @@
       performUndo();
       return;
     }
+    // PageUp / PageDown: page through the material tray (previous/next 8)
+    if (e.key === 'PageUp'){ e.preventDefault(); materialPrevPage(); return; }
+    if (e.key === 'PageDown'){ e.preventDefault(); materialNextPage(); return; }
     // V / H (no modifier): move the active selection one step forward / backward
     if (!e.metaKey && !e.ctrlKey && !e.altKey && state.selectedIds.size){
       if (e.key === 'v' || e.key === 'V'){
@@ -1124,7 +1261,8 @@
     function up(){
       primaryEl.removeEventListener('pointermove', move);
       primaryEl.removeEventListener('pointerup', up);
-      updateBoardScale();
+      const promoted = checkMaterialPromotion(tiles);
+      if (promoted) render(); else updateBoardScale();
     }
     primaryEl.addEventListener('pointermove', move);
     primaryEl.addEventListener('pointerup', up);
@@ -1371,27 +1509,19 @@
         newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null,
                          dirId: dirId != null ? dirId : null, relPath: relPath || null,
                          filename: file.name, naturalW: dims.w, naturalH: dims.h,
-                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false });
+                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false,
+                         isMaterial: true });
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
     if (!newTiles.length) return;
     pushUndo();
 
-    // append new photos into the block layout, continuing in reading order right where
-    // the last one left off — existing tiles (and any manual edits already made) are untouched
-    newTiles.forEach(t => {
-      const scale = ROW_HEIGHT / t.naturalH;
-      const w = t.naturalW * scale, h = ROW_HEIGHT;
-      if (blockCursor.x > 0 && blockCursor.x + w > BLOCK_WRAP_WIDTH){
-        blockCursor.y += blockCursor.rowH + ROW_GAP;
-        blockCursor.x = 0; blockCursor.rowH = 0;
-      }
-      t.w = w; t.h = h; t.x = blockCursor.x; t.y = blockCursor.y; t.rot = 0; t.z = ++maxZ;
-      t.imgScale = scale; t.imgOffsetX = 0; t.imgOffsetY = 0; // perfectly framed, no crop yet
-      blockCursor.x += w + ROW_GAP;
-      blockCursor.rowH = Math.max(blockCursor.rowH, h);
-    });
+    // new photos land in the material tray (top-left), not spread across a wide block —
+    // layoutMaterialZone() places whichever ones fall on the current page; the rest just
+    // wait in the queue until you page to them or use up what's showing.
+    newTiles.forEach(t => { t.z = ++maxZ; });
     state.tiles.push(...newTiles);
+    layoutMaterialZone();
     render();
   }
 
@@ -1551,15 +1681,15 @@
   const exportConfirmBtn = document.getElementById('exportConfirmBtn');
 
   function updateExportHint(){
-    const bw = Math.round(boardWidth());
-    const bh = Math.round(boardHeight());
+    const wb = workspaceBounds();
+    const bw = Math.round(wb.w), bh = Math.round(wb.h);
     if (!exportWidthInput.value) exportWidthInput.placeholder = Math.round(bw * DEFAULT_RES);
     exportHint.textContent = 'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×).';
   }
 
   exportBtn.addEventListener('click', e => {
     e.stopPropagation();
-    if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
+    if (!state.tiles.some(t => !t.isMaterial)){ alert('Noch keine Fotos auf der Arbeitsfläche — zieh zuerst welche aus dem Material-Fach heraus.'); return; }
     updateExportHint();
     exportPanel.classList.toggle('open');
   });
@@ -1569,13 +1699,13 @@
   exportPanel.addEventListener('click', e => e.stopPropagation());
 
   exportConfirmBtn.addEventListener('click', async () => {
-    if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
+    if (!state.tiles.some(t => !t.isMaterial)){ alert('Noch keine Fotos auf der Arbeitsfläche — zieh zuerst welche aus dem Material-Fach heraus.'); return; }
     const originalText = exportConfirmBtn.textContent;
     exportConfirmBtn.textContent = 'Exportiere…';
     exportConfirmBtn.disabled = true;
     try {
-      const bw = boardWidth();
-      const bh = boardHeight();
+      const wb = workspaceBounds();
+      const bw = wb.w, bh = wb.h;
       const targetWidth = parseFloat(exportWidthInput.value);
       const RES = (targetWidth && targetWidth > 0) ? (targetWidth / bw) : DEFAULT_RES;
       const transparent = exportTransparent.checked;
@@ -1588,7 +1718,7 @@
         ctx.fillRect(0,0,canvas.width,canvas.height);
       }
 
-      const ordered = [...state.tiles].sort((a,b) => a.z - b.z);
+      const ordered = state.tiles.filter(t => !t.isMaterial).sort((a,b) => a.z - b.z);
       const results = await Promise.allSettled(ordered.map(t => new Promise((resolve,reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
@@ -1601,7 +1731,7 @@
         if (results[i].status !== 'fulfilled') return; // fehlendes Bild — bitte zuerst über "🔗 Verknüpfen" ersetzen
         const img = results[i].value;
         ctx.save();
-        ctx.translate((tile.x + tile.w/2) * RES, (tile.y + tile.h/2) * RES);
+        ctx.translate((tile.x - wb.minX + tile.w/2) * RES, (tile.y - wb.minY + tile.h/2) * RES);
         ctx.rotate(tile.rot * Math.PI/180);
         ctx.translate(-tile.w/2 * RES, -tile.h/2 * RES); // local origin = tile's own top-left, matching cut coords
 
@@ -1696,7 +1826,8 @@
         imgScale: t.imgScale != null ? t.imgScale : null,
         imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
         imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null,
-        cuts: t.cuts || null
+        cuts: t.cuts || null,
+        isMaterial: !!t.isMaterial
       }))
     });
     await txDone(tx);
@@ -1816,6 +1947,7 @@
         imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : null,
         imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : null,
         cuts: r.cuts || null,
+        isMaterial: !!r.isMaterial,
         x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
       });
     }
@@ -1829,6 +1961,7 @@
     state.selectedIds = new Set();
     viewZoom = 1;
     dragMode = 'move';
+    materialPage = 0;
     if (record.color) setBoardColor(record.color);
     state.currentProjectId = record.id;
     state.currentProjectName = record.name;
@@ -2266,6 +2399,7 @@
     state.dirHandles = [];
     maxZ = 0; viewZoom = 1; dragMode = 'move';
     blockCursor = { x:0, y:0, rowH:0 };
+    materialPage = 0;
     updateModeBadge();
     setBoardColor('#121214');
 
