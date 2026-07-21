@@ -94,8 +94,9 @@
   .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
   .tile.cut-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #ff9d5c;}
   .cut-layer{position:absolute;left:0;top:0;width:100%;height:100%;}
-  .cut-point-handle{margin-left:-14px;margin-top:-14px;background:#ff9d5c;color:#3a1f08;font-size:12px;}
-  .cut-point-handle.control{background:#6fc3e8;color:#0a2a3a;}
+  .handle.cut-point-handle{margin-left:-14px;margin-top:-14px;background:#ff9d5c;color:#3a1f08;font-size:12px;cursor:grab;}
+  .handle.cut-point-handle:active{cursor:grabbing;}
+  .handle.cut-point-handle.control{background:#6fc3e8;color:#0a2a3a;}
 
   .marquee{
     position:fixed;display:none;border:1px dashed var(--gold);
@@ -507,11 +508,23 @@
         ny = Math.max(-margin, Math.min(tile.h + margin, ny));
       }
       cutPoints[idx] = { x:nx, y:ny };
-      render();
+
+      // update the DOM directly instead of calling render() — a full rebuild mid-drag would
+      // remove this captured element from the document, silently ending the drag gesture
+      const handleEl = el.querySelector('.cut-point-handle[data-cut-index="' + idx + '"]');
+      if (handleEl){ handleEl.style.left = nx + 'px'; handleEl.style.top = ny + 'px'; }
+      if (cutPoints.length >= 2){
+        const pendingLayer = el.querySelector('[data-pending-cut]');
+        if (pendingLayer){
+          const cut = { p1: cutPoints[0], p2: cutPoints[1], control: cutPoints[2] || null };
+          pendingLayer.style.clipPath = cutCSSPath(cut, tile.w, tile.h);
+        }
+      }
     }
     function up(){
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
+      render();
     }
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
@@ -684,14 +697,17 @@
 
         // committed cuts + (if this is the tile being cut right now) a live preview of the
         // pending cut — each is a nested layer, so their clip-paths intersect naturally.
-        const cuts = tile.cuts ? tile.cuts.slice() : [];
-        if (isCutting && cutPoints.length >= 2){
+        const committedCuts = tile.cuts ? tile.cuts.slice() : [];
+        const hasPending = isCutting && cutPoints.length >= 2;
+        const cuts = committedCuts.slice();
+        if (hasPending){
           cuts.push({ p1: cutPoints[0], p2: cutPoints[1], control: cutPoints[2] || null });
         }
-        cuts.forEach(cut => {
+        cuts.forEach((cut, ci) => {
           const layer = document.createElement('div');
           layer.className = 'cut-layer';
           layer.style.clipPath = cutCSSPath(cut, tile.w, tile.h);
+          if (hasPending && ci === cuts.length - 1) layer.dataset.pendingCut = 'true';
           mountPoint.appendChild(layer);
           mountPoint = layer;
         });
