@@ -309,7 +309,7 @@
     <div class="viewport" id="viewport">
       <div class="board-frame" id="boardFrame">
         <div class="board" id="board">
-          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Aktivieren, dann <b>P</b>: 2-3 Punkte an den Rand klicken,<br>schneidet im Uhrzeigersinn von Punkt 1 zu Punkt 2<br>(3. Punkt auf der Linie = Kurve, Alt+Ziehen zum Anpassen,<br>nochmal P = fertig)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
+          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Aktivieren, dann <b>P</b>: 2-3 Punkte an den Rand klicken,<br>schneidet im Uhrzeigersinn von Punkt 1 zu Punkt 2<br>(3. Punkt auf der Linie = Kurve, Punkte direkt anfassen<br>und ziehen zum Anpassen,<br>nochmal P = fertig)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
         </div>
       </div>
     </div>
@@ -377,7 +377,7 @@
       const n = cutPoints.length;
       modeBadge.textContent = n === 0 ? '✂️ Schnitt: 1. Punkt an einen Rand klicken · P zum Beenden'
         : n === 1 ? '✂️ Schnitt: 2. Punkt an einen anderen Rand klicken (im Uhrzeigersinn bleibt erhalten) · P zum Beenden'
-        : '✂️ Schnitt aktiv — optional 3. Punkt auf der Linie für Kurve · Alt+Ziehen zum Anpassen · P zum Beenden';
+        : '✂️ Schnitt aktiv — optional 3. Punkt auf der Linie für Kurve · Punkte ziehen zum Anpassen · P zum Beenden';
     }
     else modeBadge.style.display = 'none';
   }
@@ -896,7 +896,7 @@
     // Cut tool active on this exact tile: clicks place points / drag handles, nothing else
     if (dragMode === 'cut' && tile.id === cutTileId){
       if (cls.contains('cut-point-handle')){
-        if (e.altKey) startCutPointDrag(e, tile, parseInt(e.target.dataset.cutIndex, 10));
+        startCutPointDrag(e, tile, parseInt(e.target.dataset.cutIndex, 10));
         return;
       }
       if (cutPoints.length < 3) placeCutPoint(e, tile, elOriginal);
