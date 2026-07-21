@@ -314,12 +314,12 @@
   }
 
   function boardWidth(){
-    let maxX = 300;
+    let maxX = 560;
     state.tiles.forEach(t => { maxX = Math.max(maxX, t.x + t.w); });
     return maxX + BOARD_MARGIN;
   }
   function boardHeight(){
-    let maxY = 200;
+    let maxY = 720;
     state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
     return maxY + BOARD_MARGIN;
   }
@@ -1170,15 +1170,17 @@
   // ---------- Save / Load projects (IndexedDB — named, multiple slots, keeps the actual photos) ----------
   function openDB(){
     return new Promise((resolve, reject) => {
+      if (!window.indexedDB){ reject(new Error('IndexedDB ist in diesem Browser/Modus nicht verfügbar (z.B. Safari privates Surfen).')); return; }
       const req = indexedDB.open('joiner-db', 2);
-      req.onupgradeneeded = (e) => {
+      req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('projects')){
           db.createObjectStore('projects', { keyPath: 'id' });
         }
       };
+      req.onblocked = () => reject(new Error('Datenbank blockiert — bitte alle anderen Tabs dieser App schließen und erneut versuchen.'));
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onerror = () => reject(req.error || new Error('Unbekannter IndexedDB-Fehler'));
     });
   }
   function txDone(tx){
@@ -1290,7 +1292,12 @@
     loadModalOverlay.style.display = 'flex';
     let projects;
     try { projects = await listProjects(); }
-    catch(err){ console.error(err); projectList.innerHTML = '<p class="modal-empty">Fehler beim Laden der Liste.</p>'; return; }
+    catch(err){
+      console.error(err);
+      const msg = (err && err.message) ? err.message : String(err);
+      projectList.innerHTML = '<p class="modal-empty">Fehler beim Laden der Liste:<br>' + msg + '</p>';
+      return;
+    }
 
     if (!projects.length){
       projectList.innerHTML = '<p class="modal-empty">Noch keine gespeicherten Collagen.</p>';
