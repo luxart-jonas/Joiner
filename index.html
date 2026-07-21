@@ -4,13 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Joiner — Fotocollagen</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#121214">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Joiner">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -83,15 +76,14 @@
 
   /* ---------- Tiles ---------- */
   .tile{
-    position:absolute;box-sizing:border-box;overflow:hidden;
+    position:absolute;box-sizing:border-box;
     box-shadow:0 4px 14px rgba(0,0,0,.5);
     cursor:grab;touch-action:none;user-select:none;
   }
   .tile:active{cursor:grabbing;}
-  .tile img{position:absolute;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
   .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
   .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
-  .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
 
   .marquee{
     position:fixed;display:none;border:1px dashed var(--gold);
@@ -103,6 +95,18 @@
     background:rgba(111,195,232,.12);border:1px solid #6fc3e8;color:#6fc3e8;
     font-size:12.5px;font-weight:500;white-space:nowrap;
   }
+  .curve-badge{background:rgba(212,175,55,.12);border-color:var(--gold);color:var(--gold-soft);}
+
+  .curve-overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+  .curve-line{fill:none;stroke:var(--gold);stroke-width:2.5;vector-effect:non-scaling-stroke;}
+  .curve-guide{stroke:rgba(212,175,55,.45);stroke-width:1;stroke-dasharray:4 4;vector-effect:non-scaling-stroke;}
+  .curve-handle{
+    position:absolute;width:16px;height:16px;margin-left:-8px;margin-top:-8px;
+    border-radius:50%;background:var(--gold);border:2px solid var(--mat);
+    cursor:grab;touch-action:none;z-index:6;
+  }
+  .curve-handle:active{cursor:grabbing;}
+  .curve-handle-control{background:#6fc3e8;}
 
   .color-control{display:flex;align-items:center;gap:6px;}
   .color-swatch{
@@ -115,45 +119,6 @@
     position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;
   }
   #eyedropperBtn{padding:9px 11px;font-size:15px;}
-  .current-project-label{font-size:11.5px;color:var(--text-dim);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
-
-  /* ---------- Export popover ---------- */
-  .export-wrap{position:relative;display:inline-flex;}
-  .export-panel{
-    display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:200;
-    width:240px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
-    box-shadow:0 20px 50px rgba(0,0,0,.5);padding:14px;
-  }
-  .export-panel.open{display:block;}
-  .export-panel label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;}
-  .export-panel .field{margin-bottom:12px;}
-  .export-panel input[type=number]{
-    width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;
-    color:var(--text);font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;
-  }
-  .export-panel .checkline{display:flex;align-items:center;gap:8px;}
-  .export-panel .checkline label{margin:0;color:var(--text);font-size:13px;}
-  .export-panel .hint{font-size:11px;color:var(--text-dim);margin-top:3px;line-height:1.4;}
-  .export-panel .btn{width:100%;justify-content:center;}
-
-  /* ---------- Relink (missing images) ---------- */
-  .tile.broken img{display:none;}
-  .tile-broken-fill{
-    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:8px;background:repeating-linear-gradient(45deg,#241f16,#241f16 8px,#2c2515 8px,#2c2515 16px);
-    border:1px dashed var(--gold-soft);text-align:center;padding:6px;
-  }
-  .tile-broken-fill span{font-size:11px;color:var(--gold-soft);line-height:1.3;word-break:break-all;padding:0 4px;}
-  .relink-btn{
-    appearance:none;border:1px solid var(--gold-soft);background:rgba(212,175,55,.12);color:var(--gold-soft);
-    padding:5px 9px;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;
-  }
-  .relink-btn:hover{background:var(--gold);color:#1a1608;}
-
-  .modal-footer{
-    display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap;
-  }
-  .modal-footer .btn{font-size:12.5px;padding:8px 12px;}
 
   /* ---------- Load modal ---------- */
   .modal-overlay{
@@ -187,40 +152,9 @@
   .project-meta{color:var(--text-dim);font-size:12px;margin-top:2px;}
   .project-actions{display:flex;gap:6px;flex-shrink:0;}
   .project-actions .btn{padding:7px 11px;font-size:12.5px;}
-
-  /* ---------- Media panel: bins + drag/drop tree ---------- */
-  .modal-media{width:min(560px, 100%);}
-  .media-dropzone{
-    margin:12px 18px 0;padding:14px;border:1.5px dashed var(--border);border-radius:8px;
-    text-align:center;font-size:12.5px;color:var(--text-dim);transition:border-color .15s,background .15s,color .15s;
-  }
-  .media-dropzone.dragover{border-color:var(--gold-soft);color:var(--gold-soft);background:rgba(212,175,55,.06);}
-  .media-dropzone.working{border-color:var(--gold-soft);color:var(--gold-soft);}
-
-  .bin{margin:6px 8px;border-radius:8px;transition:background .15s;}
-  .bin.dragover-bin{background:rgba(212,175,55,.1);outline:1px dashed var(--gold-soft);}
-  .bin-header{
-    display:flex;align-items:center;gap:8px;padding:10px 10px;cursor:pointer;border-radius:6px;
-    user-select:none;
-  }
-  .bin-header:hover{background:var(--panel-2);}
-  .bin-header .chevron{font-size:10px;color:var(--text-dim);transition:transform .15s;width:10px;flex-shrink:0;}
-  .bin-header.collapsed .chevron{transform:rotate(-90deg);}
-  .bin-name{font-family:'Fraunces',serif;font-weight:600;font-size:14px;color:var(--gold-soft);flex:1;min-width:0;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .bin-count{font-size:11.5px;color:var(--text-dim);}
-  .bin-del{background:none;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:4px;}
-  .bin-del:hover{color:#e2a2a2;}
-  .bin-children{padding-left:14px;}
-  .bin[draggable="true"]{cursor:grab;}
-  .bin.dragging-bin{opacity:.4;}
-
-  .project-row[draggable="true"]{cursor:grab;}
-  .project-row.dragging-row{opacity:.35;}
-  .unfiled-header{
-    padding:14px 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:.3px;
-    color:var(--text-dim);text-transform:uppercase;
-  }
+  .modal.small{width:min(320px, 100%);}
+  .media-choice-body{display:flex;flex-direction:column;gap:8px;padding:16px;}
+  .media-choice-body .btn{width:100%;justify-content:center;padding:12px;font-size:14px;}
 
   .handle{
     position:absolute;display:flex;align-items:center;justify-content:center;
@@ -232,11 +166,6 @@
   .rotate-handle{top:-38px;left:50%;transform:translateX(-50%);cursor:grab;}
   .rotate-handle:active{cursor:grabbing;}
   .resize-handle{bottom:-14px;right:-14px;cursor:nwse-resize;font-size:12px;}
-  .crop-handle{width:22px;height:22px;font-size:10px;background:#7ed9a8;color:#0d3323;border-color:var(--mat);}
-  .crop-top{top:-11px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-  .crop-bottom{bottom:-11px;left:50%;transform:translateX(-50%);cursor:ns-resize;}
-  .crop-left{left:-11px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
-  .crop-right{right:-11px;top:50%;transform:translateY(-50%);cursor:ew-resize;}
 
   .stage.dragover .board-frame::after{
     content:'Fotos hier ablegen';
@@ -264,35 +193,27 @@
     </div>
     <div class="actions">
       <span class="mode-badge" id="modeBadge">🔄 Drehmodus — R zum Beenden</span>
+      <span class="mode-badge curve-badge" id="curveModeBadge">✂️ Kurve ziehen — Enter: übernehmen · Esc: abbrechen · Entf: Schnitt entfernen</span>
+
+      <button id="newCollageBtn" class="btn btn-gold">🆕 Neue Collage</button>
+
+      <label class="btn" for="fileInput">＋ Foto</label>
+      <input id="fileInput" type="file" accept="image/*" multiple hidden>
+      <label class="btn" for="videoInput">＋ Video</label>
+      <input id="videoInput" type="file" accept="video/*" multiple hidden>
+
+      <button id="saveBtn" class="btn">💾 Speichern</button>
+      <button id="loadBtn" class="btn">📂 Laden</button>
+
       <div class="color-control" title="Hintergrundfarbe der Arbeits-/Exportfläche">
         <label class="color-swatch" id="colorSwatchLabel" for="bgColorInput"></label>
         <input type="color" id="bgColorInput" value="#121214">
         <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
       </div>
-      <button id="addPhotosBtn" class="btn btn-gold">＋ Fotos</button>
-      <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      <button id="addFolderBtn" class="btn btn-gold-outline" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
-      <button id="newCollageBtn" class="btn btn-gold-outline">+ Neue Collage</button>
-      <input id="relinkInput" type="file" accept="image/*" multiple hidden>
-      <button id="saveBtn" class="btn">💾 Save</button>
-      <span id="currentProjectLabel" class="current-project-label"></span>
-      <button id="loadBtn" class="btn">🗂️ Media</button>
 
-      <div class="export-wrap">
-        <button id="exportBtn" class="btn btn-gold-outline">Exportieren ▾</button>
-        <div class="export-panel" id="exportPanel">
-          <div class="field">
-            <label for="exportWidthInput">Breite (Pixel)</label>
-            <input type="number" id="exportWidthInput" min="100" step="10">
-            <p class="hint" id="exportHint"></p>
-          </div>
-          <div class="field checkline">
-            <input type="checkbox" id="exportTransparent">
-            <label for="exportTransparent">Transparenter Hintergrund</label>
-          </div>
-          <button id="exportConfirmBtn" class="btn btn-gold">PNG exportieren</button>
-        </div>
-      </div>
+      <button id="reassembleBtn" class="btn">⊞ In Block legen</button>
+      <button id="clearBtn" class="btn btn-ghost">Zurücksetzen</button>
+      <button id="exportBtn" class="btn btn-gold-outline">Exportieren</button>
     </div>
   </header>
 
@@ -300,7 +221,7 @@
     <div class="viewport" id="viewport">
       <div class="board-frame" id="boardFrame">
         <div class="board" id="board">
-          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>S</b>: Schneidemodus, Kante ziehen (nochmal S = aus)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>Cmd/Strg + Z</b>: rückgängig (5 Stufen)<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
+          <p class="empty-hint" id="emptyHint">Noch keine Fotos.<br><b>＋ Fotos</b> antippen oder Bilder hierher ziehen —<br>sie werden in Lesereihenfolge als Block angeordnet.<br><br>Klicken + ziehen: verschieben<br>Klicken auf leere Fläche + ziehen: Auswahlrechteck<br>Aktivieren, dann <b>R</b>: Drehmodus (nochmal R = aus)<br>Aktivieren, dann <b>P</b>: Kurve schneiden (3 Punkte ziehen,<br>Enter übernimmt, Esc bricht ab, Entf entfernt Schnitt)<br>Klicken + <b>Shift</b>: zur Gruppe hinzufügen<br>(Gruppe gemeinsam verschieben/drehen)<br>Aktivieren, dann <b>V</b>: ein Bild nach vorne<br>Aktivieren, dann <b>H</b>: ein Bild nach hinten<br><b>Cmd/Strg + A</b>: alles auswählen<br><b>Cmd/Strg + F</b>: mittig anordnen<br><b>+ / −</b> oder <b>Strg + Scrollen</b>: Ansicht zoomen<br><b>Entf</b>: löschen · <b>Esc</b>: abwählen</p>
         </div>
       </div>
     </div>
@@ -308,33 +229,30 @@
 </div>
 
 <div class="modal-overlay" id="loadModalOverlay">
-  <div class="modal modal-media">
+  <div class="modal">
     <div class="modal-header">
-      <h3>Media</h3>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button id="videoExtractBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">🎬 Aus Video</button>
-        <input id="videoInput" type="file" accept="video/*" hidden>
-        <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
-        <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
-      </div>
+      <h3>Gespeicherte Collagen</h3>
+      <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
     </div>
-    <div class="media-dropzone" id="mediaDropzone">Ordner mit Fotos hierher ziehen, um sie als neues Projekt hinzuzufügen</div>
     <div class="modal-body" id="projectList"></div>
-    <div class="modal-footer">
-      <button id="relinkBtn" class="btn" title="Fehlende Bilder der aktuell offenen Collage wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen (offene Collage)</button>
-      <button id="relinkAllBtn" class="btn" title="Ein oder mehrere Collagen ankreuzen (oder keine = alle mit fehlenden Fotos), dann einen übergeordneten Ordner wählen — die App durchsucht ihn komplett, auch alle Unterordner, und verknüpft alles, was sie per Dateiname findet.">🔍 Verknüpfen (mehrere, Ordner durchsuchen)</button>
-      <button id="backupBtn" class="btn btn-gold-outline">⬇️ Alle sichern (Backup-Datei)</button>
-      <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
-      <button id="stripAllBtn" class="btn btn-ghost">🗑️ Alle doppelten Kopien entfernen</button>
-      <input id="restoreInput" type="file" accept="application/json,.json" hidden>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mediaChoiceOverlay">
+  <div class="modal small">
+    <div class="modal-header">
+      <h3 id="mediaChoiceTitle">Medien hinzufügen</h3>
     </div>
-    <p class="modal-empty" id="backupStatus" style="display:none;padding:0 18px 14px;text-align:left;"></p>
+    <div class="modal-body media-choice-body">
+      <button id="choiceAddPhoto" class="btn btn-gold">＋ Foto</button>
+      <button id="choiceAddVideo" class="btn btn-gold">＋ Video</button>
+      <button id="choiceSkip" class="btn btn-ghost">Später</button>
+    </div>
   </div>
 </div>
 
 <script>
 (function(){
-  console.log('%cJoiner build: 2026-07-16-streaming-v2 (Streaming Backup/Restore)', 'color:#d4af37;font-weight:bold;');
   const ROW_HEIGHT = 340;   // board units — height every photo gets in the block layout
   const ROW_GAP = 10;       // gap between photos
   const BLOCK_WRAP_WIDTH = 1250; // wrap to a new row once a row reaches roughly this width — keeps photos as a block, not one long strip
@@ -346,44 +264,21 @@
   const fileInput = document.getElementById('fileInput');
 
   let globalTilt = 0;
-  const state = {
-    tiles: [], selectedIds: new Set(), dirHandles: [],
-    currentProjectId: null, currentProjectName: null, currentProjectFolder: null, // the project "💾 Speichern" silently overwrites
-    pendingName: null, pendingFolder: null // set by "+ Neue Collage", consumed by the next save
-  };
+  const state = { tiles: [], selectedIds: new Set() };
   let boardScale = 1;
   let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
   let uid = 1;
   let maxZ = 0;
-  let dragMode = 'move'; // 'move' | 'rotate' | 'crop' — toggled with R / S
+  let dragMode = 'move'; // 'move' | 'rotate' — toggled with R, for trackpad users who can't hold Alt while dragging
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
+  let dirty = false; // true when there are unsaved changes — drives the beforeunload warning
+  let currentProjectName = '';
+  let curveEditTileId = null;   // id of the tile currently being curve-cut (P tool), or null
+  let curveEditPoints = null;   // working [p0, p1(control), p2] while editing, tile-local coords
   const modeBadge = document.getElementById('modeBadge');
+  const curveModeBadge = document.getElementById('curveModeBadge');
   function updateModeBadge(){
-    if (dragMode === 'rotate'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '🔄 Drehmodus — R zum Beenden'; }
-    else if (dragMode === 'crop'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '✂️ Schneidemodus — Kante ziehen · S zum Beenden'; }
-    else modeBadge.style.display = 'none';
-  }
-
-  // ---------- Undo (Cmd/Strg+Z, 5 steps) ----------
-  const undoStack = [];
-  const UNDO_LIMIT = 5;
-  function pushUndo(){
-    undoStack.push({
-      tiles: state.tiles.map(t => ({ ...t })),
-      boardColor
-    });
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-  }
-  function performUndo(){
-    if (!undoStack.length) return;
-    const snap = undoStack.pop();
-    state.tiles = snap.tiles.map(t => ({ ...t }));
-    state.selectedIds = new Set();
-    if (snap.boardColor) setBoardColor(snap.boardColor);
-    maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
-    dragMode = 'move';
-    updateModeBadge();
-    render();
+    modeBadge.style.display = dragMode === 'rotate' ? 'inline-flex' : 'none';
   }
 
   function rand(min,max){ return min + Math.random()*(max-min); }
@@ -419,12 +314,12 @@
   }
 
   function boardWidth(){
-    let maxX = state.tiles.length ? 300 : 560; // bigger empty canvas so the help text fits inside it
+    let maxX = 300;
     state.tiles.forEach(t => { maxX = Math.max(maxX, t.x + t.w); });
     return maxX + BOARD_MARGIN;
   }
   function boardHeight(){
-    let maxY = state.tiles.length ? 200 : 660; // bigger empty canvas so the help text fits inside it
+    let maxY = 200;
     state.tiles.forEach(t => { maxY = Math.max(maxY, t.y + t.h); });
     return maxY + BOARD_MARGIN;
   }
@@ -438,17 +333,150 @@
     return [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([dx,dy]) => [cx + dx*cos - dy*sin, cy + dx*sin + dy*cos]);
   }
 
-  // Every tile keeps its own image scale + offset ("manual object-fit:cover") instead of
-  // relying on the browser's automatic centering — that's what lets a single-edge crop
-  // trim only the dragged side instead of re-centering and nibbling both sides equally.
-  // Freshly added photos get this set explicitly (0 offset = perfectly framed); this is
-  // the fallback for anything that doesn't have it yet (older saves, safety net).
-  function ensureCropDefaults(tile){
-    if (tile.imgScale != null && tile.imgOffsetX != null && tile.imgOffsetY != null) return;
-    const scale = Math.max(tile.w / tile.naturalW, tile.h / tile.naturalH);
-    tile.imgScale = scale;
-    tile.imgOffsetX = (tile.w - tile.naturalW * scale) / 2;
-    tile.imgOffsetY = (tile.h - tile.naturalH * scale) / 2;
+  // ===== Curve-cut tool (P key) — quadratic-bezier cut across a photo's rectangle =====
+  // All curve-cut math works in the tile's own local box: (0,0) top-left, (w,h) bottom-right,
+  // matching both the tile div's own CSS coordinate space and the canvas export's local frame.
+  function curveEdgeSnap(pt, w, h){
+    const dTop=pt.y, dBottom=h-pt.y, dLeft=pt.x, dRight=w-pt.x;
+    const min = Math.min(dTop,dBottom,dLeft,dRight);
+    if (min===dTop) return { x:Math.max(0,Math.min(w,pt.x)), y:0 };
+    if (min===dBottom) return { x:Math.max(0,Math.min(w,pt.x)), y:h };
+    if (min===dLeft) return { x:0, y:Math.max(0,Math.min(h,pt.y)) };
+    return { x:w, y:Math.max(0,Math.min(h,pt.y)) };
+  }
+  function curveEdgeParam(pt, w, h){
+    const eps = 1e-6;
+    if (Math.abs(pt.y) < eps) return pt.x / w;
+    if (Math.abs(pt.x - w) < eps) return 1 + pt.y / h;
+    if (Math.abs(pt.y - h) < eps) return 2 + (1 - pt.x / w);
+    return 3 + (1 - pt.y / h);
+  }
+  function curveBoundaryArc(sFrom, sTo, w, h){
+    const corners = [{x:0,y:0,s:0},{x:w,y:0,s:1},{x:w,y:h,s:2},{x:0,y:h,s:3}];
+    let span = sTo - sFrom; if (span <= 0) span += 4;
+    const result = [];
+    corners.forEach(c => {
+      let rel = c.s - sFrom; if (rel < 0) rel += 4;
+      if (rel > 0 && rel < span) result.push({ x:c.x, y:c.y, rel });
+    });
+    result.sort((a,b) => a.rel - b.rel);
+    return result.map(r => ({ x:r.x, y:r.y }));
+  }
+  function sampleQuadraticBezier(p0, p1, p2, n){
+    const pts = [];
+    for (let i=0; i<=n; i++){
+      const t = i/n, mt = 1-t;
+      pts.push({ x: mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x, y: mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y });
+    }
+    return pts;
+  }
+  function pointInPolygon(pt, poly){
+    let inside = false;
+    for (let i=0,j=poly.length-1; i<poly.length; j=i++){
+      const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+      const intersect = ((yi>pt.y)!==(yj>pt.y)) && (pt.x < (xj-xi)*(pt.y-yi)/(yj-yi)+xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  // Resolves the 3 raw points into the actual kept region (the side containing the
+  // rectangle's center), returning it as start/control/curveEnd + straight boundary corners —
+  // usable directly to build either a CSS path() string or a canvas path.
+  function curveCutPathData(points, w, h){
+    const p0 = curveEdgeSnap(points[0], w, h);
+    const p1 = points[1];
+    const p2 = curveEdgeSnap(points[2], w, h);
+    const s0 = curveEdgeParam(p0, w, h), s2 = curveEdgeParam(p2, w, h);
+    const fwd = sampleQuadraticBezier(p0, p1, p2, 28);
+    const bwd = [...fwd].reverse();
+    const regionA = [...fwd, ...curveBoundaryArc(s2, s0, w, h)];
+    const center = { x:w/2, y:h/2 };
+    if (pointInPolygon(center, regionA)){
+      return { start:p0, ctrl:p1, curveEnd:p2, arc: curveBoundaryArc(s2, s0, w, h) };
+    }
+    return { start:p2, ctrl:p1, curveEnd:p0, arc: curveBoundaryArc(s0, s2, w, h) };
+  }
+  function curveCutCSSPath(points, w, h){
+    const d = curveCutPathData(points, w, h);
+    const parts = ['M ' + d.start.x + ' ' + d.start.y, 'Q ' + d.ctrl.x + ' ' + d.ctrl.y + ' ' + d.curveEnd.x + ' ' + d.curveEnd.y];
+    d.arc.forEach(c => parts.push('L ' + c.x + ' ' + c.y));
+    parts.push('Z');
+    return "path('" + parts.join(' ') + "')";
+  }
+  function applyCanvasCurveClip(ctx, points, w, h, scale){
+    const d = curveCutPathData(points, w, h);
+    ctx.beginPath();
+    ctx.moveTo(d.start.x*scale, d.start.y*scale);
+    ctx.quadraticCurveTo(d.ctrl.x*scale, d.ctrl.y*scale, d.curveEnd.x*scale, d.curveEnd.y*scale);
+    d.arc.forEach(c => ctx.lineTo(c.x*scale, c.y*scale));
+    ctx.closePath();
+    ctx.clip();
+  }
+  function defaultCurvePoints(tile){
+    // a flat line sitting exactly on the bottom edge — a true no-op until the user drags it
+    return [ { x:0, y:tile.h }, { x:tile.w/2, y:tile.h }, { x:tile.w, y:tile.h } ];
+  }
+
+  function startCurveEdit(tileId){
+    const tile = state.tiles.find(t => t.id === tileId);
+    if (!tile) return;
+    curveEditTileId = tileId;
+    curveEditPoints = tile.curveCut ? tile.curveCut.points.map(p => ({ ...p })) : defaultCurvePoints(tile);
+    render();
+  }
+  function commitCurveEdit(){
+    const tile = state.tiles.find(t => t.id === curveEditTileId);
+    if (tile && curveEditPoints) tile.curveCut = { points: curveEditPoints.map(p => ({ ...p })) };
+    curveEditTileId = null;
+    curveEditPoints = null;
+    render();
+  }
+  function cancelCurveEdit(){
+    curveEditTileId = null;
+    curveEditPoints = null;
+    render();
+  }
+  function removeCurveCut(){
+    const tile = state.tiles.find(t => t.id === curveEditTileId);
+    if (tile) tile.curveCut = null;
+    curveEditTileId = null;
+    curveEditPoints = null;
+    render();
+  }
+
+  // Dragging a curve handle: screen-space pointer delta has to be converted into the tile's own
+  // local (unrotated) coordinate space — inverse-rotate by the tile's angle, then unscale by boardScale.
+  function startCurveHandleDrag(e, tile, idx){
+    e.stopPropagation();
+    e.preventDefault();
+    const startClientX = e.clientX, startClientY = e.clientY;
+    const startPt = { ...curveEditPoints[idx] };
+    const rad = -tile.rot * Math.PI/180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+
+    function move(ev){
+      const dxScreen = ev.clientX - startClientX, dyScreen = ev.clientY - startClientY;
+      const dxBoard = dxScreen / boardScale, dyBoard = dyScreen / boardScale;
+      const dxLocal = dxBoard*cos - dyBoard*sin;
+      const dyLocal = dxBoard*sin + dyBoard*cos;
+      let nx = startPt.x + dxLocal, ny = startPt.y + dyLocal;
+      if (idx === 0 || idx === 2){
+        const snapped = curveEdgeSnap({ x:nx, y:ny }, tile.w, tile.h);
+        nx = snapped.x; ny = snapped.y;
+      } else {
+        const margin = Math.max(tile.w, tile.h) * 0.6;
+        nx = Math.max(-margin, Math.min(tile.w + margin, nx));
+        ny = Math.max(-margin, Math.min(tile.h + margin, ny));
+      }
+      curveEditPoints[idx] = { x:nx, y:ny };
+      render();
+    }
+    function up(){
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   }
 
   // Cmd/Ctrl+F: centers the whole composition so it has exactly the same margin on all four sides.
@@ -490,8 +518,29 @@
     boardFrame.style.margin = marginY + 'px ' + marginX + 'px';
   }
 
+  // Lays every current photo out as a block — left to right, wrapping to a new row
+  // roughly every BLOCK_WRAP_WIDTH — in the order they were added (reading order),
+  // instead of one long strip. Keeps photos noticeably bigger on screen.
+  function layoutBlock(){
+    let x = 0, y = 0, rowH = 0;
+    state.tiles.forEach((t, i) => {
+      const scale = ROW_HEIGHT / t.naturalH;
+      const w = t.naturalW * scale, h = ROW_HEIGHT;
+      if (x > 0 && x + w > BLOCK_WRAP_WIDTH){
+        y += rowH + ROW_GAP;
+        x = 0; rowH = 0;
+      }
+      t.w = w; t.h = h; t.x = x; t.y = y; t.rot = 0; t.z = i + 1;
+      x += w + ROW_GAP;
+      rowH = Math.max(rowH, h);
+    });
+    maxZ = state.tiles.length;
+    blockCursor = { x, y, rowH };
+    viewZoom = 1;
+  }
 
   function render(){
+    dirty = state.tiles.length > 0;
     emptyHint.style.display = state.tiles.length ? 'none' : 'block';
     board.querySelectorAll('.tile').forEach(el => el.remove());
     const onlySelected = state.selectedIds.size === 1 ? [...state.selectedIds][0] : null;
@@ -499,9 +548,7 @@
     state.tiles.forEach(tile => {
       const isSelected = state.selectedIds.has(tile.id);
       const el = document.createElement('div');
-      el.className = 'tile' + (isSelected ? ' selected' : '')
-        + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '')
-        + (isSelected && dragMode === 'crop' ? ' crop-mode' : '');
+      el.className = 'tile' + (isSelected ? ' selected' : '') + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '');
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
       el.style.width = tile.w + 'px';
@@ -511,53 +558,69 @@
       el.dataset.id = tile.id;
 
       const img = document.createElement('img');
+      img.src = tile.url;
       img.draggable = false;
-      img.onerror = () => {
-        if (tile.broken) return; // already handled
-        tile.broken = true;
-        el.classList.add('broken');
-        renderBrokenFill(el, tile);
-      };
-      if (!tile.broken){
-        img.src = tile.url;
-        ensureCropDefaults(tile);
-        img.style.left = tile.imgOffsetX + 'px';
-        img.style.top = tile.imgOffsetY + 'px';
-        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
-        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
-      }
       el.appendChild(img);
 
-      if (tile.broken){
-        el.classList.add('broken');
-        renderBrokenFill(el, tile);
+      const isCurveEditing = tile.id === curveEditTileId;
+      const activeCurvePoints = isCurveEditing ? curveEditPoints : (tile.curveCut ? tile.curveCut.points : null);
+      if (activeCurvePoints){
+        img.style.clipPath = curveCutCSSPath(activeCurvePoints, tile.w, tile.h);
+      } else {
+        img.style.clipPath = '';
       }
 
-      if (tile.id === onlySelected){
+      if (tile.id === onlySelected && !isCurveEditing){
         const del = document.createElement('div');
         del.className = 'handle delete-handle';
         del.textContent = '×';
         el.appendChild(del);
 
-        if (dragMode === 'crop'){
-          ['top','right','bottom','left'].forEach(edge => {
-            const h = document.createElement('div');
-            h.className = 'handle crop-handle crop-' + edge;
-            h.dataset.edge = edge;
-            h.textContent = '✂';
-            el.appendChild(h);
-          });
-        } else {
-          const rot = document.createElement('div');
-          rot.className = 'handle rotate-handle';
-          rot.textContent = '⟳';
-          el.appendChild(rot);
+        const rot = document.createElement('div');
+        rot.className = 'handle rotate-handle';
+        rot.textContent = '⟳';
+        el.appendChild(rot);
 
-          const res = document.createElement('div');
-          res.className = 'handle resize-handle';
-          res.textContent = '⤡';
-          el.appendChild(res);
-        }
+        const res = document.createElement('div');
+        res.className = 'handle resize-handle';
+        res.textContent = '⤡';
+        el.appendChild(res);
+      }
+
+      if (isCurveEditing){
+        // SVG overlay showing the raw 3-point curve (unclipped), sized to the tile's own box —
+        // overflow visible so the control point can be dragged outside the rectangle too.
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('class', 'curve-overlay');
+        svg.setAttribute('viewBox', '0 0 ' + tile.w + ' ' + tile.h);
+        svg.style.overflow = 'visible';
+        const [p0,p1,p2] = curveEditPoints;
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('d', 'M ' + p0.x + ' ' + p0.y + ' Q ' + p1.x + ' ' + p1.y + ' ' + p2.x + ' ' + p2.y);
+        path.setAttribute('class', 'curve-line');
+        svg.appendChild(path);
+        const guide1 = document.createElementNS(svgNS, 'line');
+        guide1.setAttribute('x1', p0.x); guide1.setAttribute('y1', p0.y);
+        guide1.setAttribute('x2', p1.x); guide1.setAttribute('y2', p1.y);
+        guide1.setAttribute('class', 'curve-guide');
+        svg.appendChild(guide1);
+        const guide2 = document.createElementNS(svgNS, 'line');
+        guide2.setAttribute('x1', p1.x); guide2.setAttribute('y1', p1.y);
+        guide2.setAttribute('x2', p2.x); guide2.setAttribute('y2', p2.y);
+        guide2.setAttribute('class', 'curve-guide');
+        svg.appendChild(guide2);
+        el.appendChild(svg);
+
+        curveEditPoints.forEach((pt, idx) => {
+          const handle = document.createElement('div');
+          handle.className = 'curve-handle' + (idx === 1 ? ' curve-handle-control' : '');
+          handle.style.left = pt.x + 'px';
+          handle.style.top = pt.y + 'px';
+          handle.dataset.curveIndex = idx;
+          handle.addEventListener('pointerdown', e => startCurveHandleDrag(e, tile, idx));
+          el.appendChild(handle);
+        });
       }
 
       el.addEventListener('pointerdown', e => onTilePointerDown(e, tile, el));
@@ -565,148 +628,23 @@
       board.appendChild(el);
     });
 
+    curveModeBadge.style.display = curveEditTileId ? 'inline-flex' : 'none';
     updateBoardScale();
   }
 
-  // ---------- Broken image placeholder + relink ----------
-  function renderBrokenFill(el, tile){
-    if (el.querySelector('.tile-broken-fill')) return;
-    const fill = document.createElement('div');
-    fill.className = 'tile-broken-fill';
-    const label = document.createElement('span');
-    label.textContent = '🖼️ fehlt\n' + (tile.filename || tile.id);
-    label.style.whiteSpace = 'pre-line';
-    const btn = document.createElement('button');
-    btn.className = 'relink-btn';
-    btn.textContent = '🔗 Datei wählen';
-    btn.addEventListener('pointerdown', e => e.stopPropagation());
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      relinkSingleTile(tile);
-    });
-    fill.appendChild(label);
-    fill.appendChild(btn);
-    el.appendChild(fill);
-  }
-
-  function brokenTiles(){
-    return state.tiles.filter(t => t.broken);
-  }
-
-  // relink one specific tile via a single-file picker
-  async function relinkSingleTile(tile){
-    if (window.showOpenFilePicker){
-      let handles;
-      try {
-        handles = await window.showOpenFilePicker({
-          multiple: false,
-          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
-        });
-      } catch(err){ return; } // cancelled
-      try {
-        const file = await handles[0].getFile();
-        applyRelink(tile, file, handles[0]);
-      } catch(err){ console.warn(err); }
-      return;
-    }
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.addEventListener('change', () => {
-      if (input.files && input.files[0]) applyRelink(tile, input.files[0], null);
-    });
-    input.click();
-  }
-
-  async function applyRelink(tile, file, handle){
-    try { URL.revokeObjectURL(tile.url); } catch(err){}
-    tile.blob = file;
-    tile.handle = handle || tile.handle || null;
-    tile.filename = file.name;
-    tile.url = URL.createObjectURL(file);
-    tile.broken = false;
-    try {
-      const dims = await loadImageDims(tile.url);
-      tile.naturalW = dims.w;
-      tile.naturalH = dims.h;
-    } catch(err){ /* keep previous naturalW/H if the new file can't be measured */ }
-    // relinked file might have different dimensions than the original — start the
-    // framing fresh (centered cover-fit) rather than reusing a crop computed for a
-    // differently-sized image, which could look badly misaligned
-    tile.imgScale = null; tile.imgOffsetX = null; tile.imgOffsetY = null;
-    render();
-  }
-
-  // batch relink: pick many files at once, match to broken tiles by filename
-  const relinkBtn = document.getElementById('relinkBtn');
-  const relinkInput = document.getElementById('relinkInput');
-
-  function applyBatchRelink(items){ // items: [{file, handle}]
-    if (!items.length) return;
-    const missing = brokenTiles();
-    if (!missing.length) return;
-
-    const norm = s => (s || '').toLowerCase().trim();
-    const stem = s => norm(s).replace(/\.[a-z0-9]+$/, '');
-    let matchedCount = 0;
-    const used = new Set();
-
-    missing.forEach(tile => {
-      // exact filename match first, then match ignoring extension
-      let match = items.find(it => !used.has(it) && norm(it.file.name) === norm(tile.filename));
-      if (!match) match = items.find(it => !used.has(it) && stem(it.file.name) === stem(tile.filename));
-      if (match){ used.add(match); applyRelink(tile, match.file, match.handle); matchedCount++; }
-    });
-
-    // if exactly one file selected and exactly one tile still missing, assume it belongs together
-    const stillMissing = brokenTiles();
-    const leftover = items.filter(it => !used.has(it));
-    if (stillMissing.length === 1 && leftover.length === 1){
-      applyRelink(stillMissing[0], leftover[0].file, leftover[0].handle);
-      matchedCount++;
-    }
-
-    const remaining = brokenTiles().length;
-    let msg = matchedCount + ' Bild' + (matchedCount === 1 ? '' : 'er') + ' wieder verknüpft.';
-    if (remaining) msg += '\n' + remaining + ' fehlen noch — Dateiname stimmte nicht überein. Nutze den 🔗-Knopf direkt auf der Kachel, um einzeln nachzubessern.';
-    alert(msg);
-  }
-
-  relinkBtn.addEventListener('click', async () => {
-    const missing = brokenTiles();
-    if (!missing.length){
-      alert('Aktuell fehlt kein Bild — alle Fotos sind geladen.\n\nDieser Knopf wird gebraucht, sobald ein Bild nicht mehr auffindbar ist (z. B. nach dem Umzug auf eine neue Adresse). Dann erscheint hier ein "Datei wählen"-Button direkt auf der Kachel.');
-      return;
-    }
-    if (window.showOpenFilePicker){
-      let handles;
-      try {
-        handles = await window.showOpenFilePicker({
-          multiple: true,
-          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
-        });
-      } catch(err){ return; } // cancelled
-      const items = [];
-      for (const h of handles){
-        try { items.push({ file: await h.getFile(), handle: h }); }
-        catch(err){ console.warn(err); }
-      }
-      applyBatchRelink(items);
-    } else {
-      relinkInput.click();
-    }
-  });
-  relinkInput.addEventListener('change', () => {
-    const files = Array.from(relinkInput.files || []).map(f => ({ file: f, handle: null }));
-    relinkInput.value = '';
-    applyBatchRelink(files);
-  });
 
   // ---------- Drag / Rotate / Resize ----------
   function onTilePointerDown(e, tile, elOriginal){
     e.stopPropagation();
     e.preventDefault();
     const cls = e.target.classList;
+
+    if (cls.contains('curve-handle')) return; // handled by its own listener (startCurveHandleDrag)
+
+    if (curveEditTileId){
+      if (tile.id === curveEditTileId) return; // interact only through the curve handles while editing this tile
+      commitCurveEdit(); // switching tiles: keep the curve edit that was in progress
+    }
 
     if (cls.contains('delete-handle')){
       deleteTiles([tile.id]);
@@ -733,7 +671,6 @@
 
     if (cls.contains('rotate-handle')) { startRotateGroup(e, tile); return; }
     if (cls.contains('resize-handle')) { startResize(e, tile, el); return; }
-    if (cls.contains('crop-handle')) { startEdgeCrop(e, tile, el, e.target.dataset.edge); return; }
 
     if (e.altKey || dragMode === 'rotate'){ startRotateGroup(e, tile); return; }
     startDragGroup(e, tile);
@@ -765,6 +702,12 @@
   }
 
   window.addEventListener('keydown', e => {
+    // While curve-editing a tile, Enter/Escape/Delete are reinterpreted for that tool
+    if (curveEditTileId){
+      if (e.key === 'Enter'){ e.preventDefault(); commitCurveEdit(); return; }
+      if (e.key === 'Escape'){ e.preventDefault(); cancelCurveEdit(); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); removeCurveCut(); return; }
+    }
     // Global view zoom — works everywhere, no selection needed
     if (e.key === '+' || e.key === '='){
       e.preventDefault();
@@ -791,17 +734,10 @@
       centerComposition();
       return;
     }
-    // Cmd/Ctrl + Z: undo (last 5 steps)
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z'){
-      e.preventDefault();
-      performUndo();
-      return;
-    }
-    // V / H (no modifier): move the active selection one step forward / backward
+    // V / H / R / P (no modifier): act on the active selection
     if (!e.metaKey && !e.ctrlKey && !e.altKey && state.selectedIds.size){
       if (e.key === 'v' || e.key === 'V'){
         e.preventDefault();
-        pushUndo();
         [...state.tiles].filter(t => state.selectedIds.has(t.id))
           .sort((a,b) => b.z - a.z).forEach(bringForwardOneStep);
         render();
@@ -809,7 +745,6 @@
       }
       if (e.key === 'h' || e.key === 'H'){
         e.preventDefault();
-        pushUndo();
         [...state.tiles].filter(t => state.selectedIds.has(t.id))
           .sort((a,b) => a.z - b.z).forEach(bringBackwardOneStep);
         render();
@@ -822,11 +757,9 @@
         render();
         return;
       }
-      if (e.key === 's' || e.key === 'S'){
+      if (e.key === 'p' || e.key === 'P'){
         e.preventDefault();
-        dragMode = dragMode === 'crop' ? 'move' : 'crop';
-        updateModeBadge();
-        render();
+        if (state.selectedIds.size === 1) startCurveEdit([...state.selectedIds][0]);
         return;
       }
     }
@@ -854,10 +787,8 @@
     if (!primaryEl) return;
     primaryEl.setPointerCapture(e.pointerId);
     const startClientX = e.clientX, startClientY = e.clientY;
-    let pushedUndo = false;
 
     function move(ev){
-      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const dx = (ev.clientX - startClientX) / boardScale;
       const dy = (ev.clientY - startClientY) / boardScale;
       tiles.forEach((t, i) => {
@@ -891,10 +822,8 @@
     const primaryEl = board.querySelector('[data-id="' + primaryTile.id + '"]');
     if (!primaryEl) return;
     primaryEl.setPointerCapture(e.pointerId);
-    let pushedUndo = false;
 
     function move(ev){
-      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const angle = Math.atan2(ev.clientY - pivotScreenY, ev.clientX - pivotScreenX) * 180/Math.PI;
       const delta = angle - startAngle;
       const rad = delta * Math.PI/180;
@@ -925,18 +854,13 @@
 
   function startResize(e, tile, el){
     el.setPointerCapture(e.pointerId);
-    ensureCropDefaults(tile);
     const rect = el.getBoundingClientRect();
     const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
     const dist0 = Math.max(1, Math.hypot(e.clientX - cx, e.clientY - cy));
     const startW = tile.w, startH = tile.h;
-    const startScale = tile.imgScale, startOffX = tile.imgOffsetX, startOffY = tile.imgOffsetY;
     const centerBoardX = tile.x + tile.w/2, centerBoardY = tile.y + tile.h/2;
-    let pushedUndo = false;
-    const img = el.querySelector('img');
 
     function move(ev){
-      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
       const dist = Math.hypot(ev.clientX - cx, ev.clientY - cy);
       let factor = dist / dist0;
       factor = Math.max(0.25, Math.min(4, factor));
@@ -944,75 +868,10 @@
       tile.h = startH * factor;
       tile.x = centerBoardX - tile.w/2;
       tile.y = centerBoardY - tile.h/2;
-      // scale the framing along with the box so whatever crop was set stays visually consistent
-      tile.imgScale = startScale * factor;
-      tile.imgOffsetX = startOffX * factor;
-      tile.imgOffsetY = startOffY * factor;
       el.style.width = tile.w + 'px';
       el.style.height = tile.h + 'px';
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
-      if (img){
-        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
-        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
-        img.style.left = tile.imgOffsetX + 'px';
-        img.style.top = tile.imgOffsetY + 'px';
-      }
-    }
-    function up(){
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-      updateBoardScale();
-    }
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
-  }
-
-  // Shrinks the tile from ONE edge only (opposite edge stays fixed) — combined with
-  // object-fit:cover this crops that side of the photo instead of scaling the whole tile.
-  function startEdgeCrop(e, tile, el, edge){
-    el.setPointerCapture(e.pointerId);
-    ensureCropDefaults(tile);
-    const startX = tile.x, startY = tile.y, startW = tile.w, startH = tile.h;
-    const startOffX = tile.imgOffsetX, startOffY = tile.imgOffsetY;
-    const startClientX = e.clientX, startClientY = e.clientY;
-    const MIN_SIZE = 24;
-    let pushedUndo = false;
-    const img = el.querySelector('img');
-
-    function move(ev){
-      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
-      const dx = (ev.clientX - startClientX) / boardScale;
-      const dy = (ev.clientY - startClientY) / boardScale;
-      // convert screen-space drag into the tile's own (possibly rotated) local space
-      const rad = -tile.rot * Math.PI/180;
-      const cos = Math.cos(rad), sin = Math.sin(rad);
-      const localDx = dx*cos - dy*sin;
-      const localDy = dx*sin + dy*cos;
-
-      // trimming a side means: the box's edge on that side moves in, AND the image's
-      // offset shifts by exactly the same amount so its on-screen position doesn't move —
-      // that's what makes the crop happen ONLY on the dragged side, not both symmetrically.
-      if (edge === 'top'){
-        const newH = Math.max(MIN_SIZE, startH - localDy);
-        const trimmed = startH - newH;
-        tile.y = startY + trimmed;
-        tile.h = newH;
-        tile.imgOffsetY = startOffY - trimmed;
-      } else if (edge === 'bottom'){
-        tile.h = Math.max(MIN_SIZE, startH + localDy);
-      } else if (edge === 'left'){
-        const newW = Math.max(MIN_SIZE, startW - localDx);
-        const trimmed = startW - newW;
-        tile.x = startX + trimmed;
-        tile.w = newW;
-        tile.imgOffsetX = startOffX - trimmed;
-      } else if (edge === 'right'){
-        tile.w = Math.max(MIN_SIZE, startW + localDx);
-      }
-      el.style.left = tile.x + 'px'; el.style.top = tile.y + 'px';
-      el.style.width = tile.w + 'px'; el.style.height = tile.h + 'px';
-      if (img){ img.style.left = tile.imgOffsetX + 'px'; img.style.top = tile.imgOffsetY + 'px'; }
     }
     function up(){
       el.removeEventListener('pointermove', move);
@@ -1024,7 +883,6 @@
   }
 
   function deleteTiles(ids){
-    pushUndo();
     const idSet = new Set(ids);
     state.tiles = state.tiles.filter(t => !idSet.has(t.id));
     idSet.forEach(id => state.selectedIds.delete(id));
@@ -1106,25 +964,9 @@
     });
   }
 
-  async function addFilesCommon(items){ // items: [{file, handle, dirId, relPath}]
-    const usable = items.filter(it => it.file && it.file.type.startsWith('image/'));
-    if (!usable.length) return;
-    const newTiles = [];
-    for (const { file, handle, dirId, relPath } of usable){
-      const url = URL.createObjectURL(file);
-      try {
-        const dims = await loadImageDims(url);
-        newTiles.push({ id: 't' + (uid++), url, blob: file, handle: handle || null,
-                         dirId: dirId != null ? dirId : null, relPath: relPath || null,
-                         filename: file.name, naturalW: dims.w, naturalH: dims.h,
-                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0, broken:false });
-      } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
-    }
-    if (!newTiles.length) return;
-    pushUndo();
-
-    // append new photos into the block layout, continuing in reading order right where
-    // the last one left off — existing tiles (and any manual edits already made) are untouched
+  // places newly-added tiles into the block layout, continuing in reading order right where
+  // the last one left off — existing tiles (and any manual edits already made) are untouched
+  function appendNewTilesToBlock(newTiles){
     newTiles.forEach(t => {
       const scale = ROW_HEIGHT / t.naturalH;
       const w = t.naturalW * scale, h = ROW_HEIGHT;
@@ -1133,144 +975,87 @@
         blockCursor.x = 0; blockCursor.rowH = 0;
       }
       t.w = w; t.h = h; t.x = blockCursor.x; t.y = blockCursor.y; t.rot = 0; t.z = ++maxZ;
-      t.imgScale = scale; t.imgOffsetX = 0; t.imgOffsetY = 0; // perfectly framed, no crop yet
       blockCursor.x += w + ROW_GAP;
       blockCursor.rowH = Math.max(blockCursor.rowH, h);
     });
+  }
+
+  async function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    const newTiles = [];
+    for (const file of files){
+      const url = URL.createObjectURL(file);
+      try {
+        const dims = await loadImageDims(url);
+        newTiles.push({ id: 't' + (uid++), url, blob: file, naturalW: dims.w, naturalH: dims.h,
+                         x:0, y:0, w:dims.w, h:dims.h, rot:0, z:0 });
+      } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
+    }
+    if (!newTiles.length) return;
+    appendNewTilesToBlock(newTiles);
     state.tiles.push(...newTiles);
+    dirty = true;
     render();
   }
 
-  // classic <input type=file> path (Safari/Firefox, or drag&drop) — no persistent handle possible
-  async function addFiles(fileList){
-    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
-    await addFilesCommon(files.map(f => ({ file: f, handle: null })));
+  // grabs a representative still frame from a video file and adds it as a normal photo tile
+  function extractVideoFrame(file){
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = url;
+      video.addEventListener('loadeddata', () => {
+        const seekTime = video.duration ? Math.min(1, video.duration * 0.1) : 0;
+        video.currentTime = seekTime;
+      });
+      video.addEventListener('seeked', () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url);
+          if (!blob) { reject(new Error('no frame')); return; }
+          resolve({ blob, w: video.videoWidth, h: video.videoHeight });
+        }, 'image/jpeg', 0.92);
+      });
+      video.addEventListener('error', () => { URL.revokeObjectURL(url); reject(new Error('video load error')); });
+    });
   }
 
-  // File System Access API path (Chrome) — keeps a reusable handle so projects can
-  // reconnect to the original photo automatically next time, instead of needing a manual relink.
-  async function addFilesFromHandles(handles){
-    const items = [];
-    for (const h of handles){
-      try { items.push({ file: await h.getFile(), handle: h }); }
-      catch(err){ console.warn('Datei konnte nicht gelesen werden', err); }
-    }
-    await addFilesCommon(items);
-  }
-
-  // ---------- Whole-folder linking ----------
-  // Links an entire folder (e.g. "Azoren") at once — one permission grant covers every
-  // photo inside, instead of asking per file. This is the recommended way to add many
-  // photos, and it's what makes reconnecting 40 photos later a single click, not 40.
-  const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|heic|heif|tiff?|bmp|avif)$/i;
-
-  async function scanImagesInDirectory(dirHandle, maxDepth){
-    const found = [];
-    async function walk(handle, depth, prefix){
-      for await (const entry of handle.values()){
-        if (entry.kind === 'file'){
-          if (IMAGE_EXT_RE.test(entry.name)) found.push({ name: prefix + entry.name, fileHandle: entry });
-        } else if (entry.kind === 'directory' && depth < maxDepth){
-          await walk(entry, depth + 1, prefix + entry.name + '/');
-        }
-      }
-    }
-    await walk(dirHandle, 0, '');
-    return found;
-  }
-
-  async function resolveFileInDir(dirHandle, relPath){
-    const parts = relPath.split('/');
-    let cur = dirHandle;
-    for (let i = 0; i < parts.length - 1; i++) cur = await cur.getDirectoryHandle(parts[i]);
-    const fileHandle = await cur.getFileHandle(parts[parts.length - 1]);
-    return { fileHandle, file: await fileHandle.getFile() };
-  }
-
-  // Deep recursive scan building filename → location index — used by the "several
-  // collages at once" relink, so it doesn't matter which subfolder a photo ended up in,
-  // as long as every photo has a distinct filename (true for camera/phone exports).
-  async function buildFilenameIndex(dirHandle, maxDepth, onProgress){
-    const index = new Map();
-    let count = 0;
-    async function walk(handle, depth, prefix){
-      for await (const entry of handle.values()){
-        if (entry.kind === 'file'){
-          if (IMAGE_EXT_RE.test(entry.name)){
-            const key = entry.name.toLowerCase().trim();
-            if (!index.has(key)) index.set(key, { relPath: prefix + entry.name, fileHandle: entry });
-            count++;
-            if (onProgress && count % 25 === 0) onProgress(count);
-          }
-        } else if (entry.kind === 'directory' && depth < maxDepth){
-          await walk(entry, depth + 1, prefix + entry.name + '/');
-        }
-      }
-    }
-    await walk(dirHandle, 0, '');
-    return index;
-  }
-
-  function registerDirHandle(handle, name){
-    const id = 'd' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-    state.dirHandles.push({ id, handle, name });
-    return id;
-  }
-
-  function usedDirHandles(){
-    const ids = new Set(state.tiles.map(t => t.dirId).filter(x => x != null));
-    return state.dirHandles.filter(d => ids.has(d.id));
-  }
-
-  const addFolderBtn = document.getElementById('addFolderBtn');
-  addFolderBtn.addEventListener('click', async () => {
-    if (!window.showDirectoryPicker){
-      alert('Ordner-Verknüpfung braucht die Dateisystem-Funktionen von aktuellem Chrome — in diesem Browser nicht verfügbar. Nutze stattdessen "＋ Fotos".');
-      return;
-    }
-    let dirHandle;
-    try { dirHandle = await window.showDirectoryPicker(); }
-    catch(err){ return; } // cancelled
-    addFolderBtn.textContent = 'Durchsuche…';
-    addFolderBtn.disabled = true;
-    try {
-      const found = await scanImagesInDirectory(dirHandle, 2);
-      if (!found.length){
-        alert('Keine Bilder in „' + dirHandle.name + '“ gefunden (durchsucht bis 2 Unterordner tief).');
-        return;
-      }
-      const dirId = registerDirHandle(dirHandle, dirHandle.name);
-      const items = [];
-      for (const f of found){
-        try { items.push({ file: await f.fileHandle.getFile(), handle: f.fileHandle, dirId, relPath: f.name }); }
-        catch(err){ console.warn(err); }
-      }
-      await addFilesCommon(items);
-    } finally {
-      addFolderBtn.textContent = '📁 Ordner';
-      addFolderBtn.disabled = false;
-    }
-  });
-
-  const addPhotosBtn = document.getElementById('addPhotosBtn');
-  addPhotosBtn.addEventListener('click', async () => {
-    if (window.showOpenFilePicker){
-      let handles;
+  async function addVideoFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('video/'));
+    if (!files.length) return;
+    const newTiles = [];
+    for (const file of files){
       try {
-        handles = await window.showOpenFilePicker({
-          multiple: true,
-          types: [{ description: 'Bilder', accept: { 'image/*': ['.png','.jpg','.jpeg','.webp','.gif','.heic','.heif','.tif','.tiff','.bmp'] } }]
-        });
-      } catch(err){ return; } // cancelled
-      addFilesFromHandles(handles);
-    } else {
-      fileInput.click();
+        const frame = await extractVideoFrame(file);
+        const url = URL.createObjectURL(frame.blob);
+        newTiles.push({ id: 't' + (uid++), url, blob: frame.blob, naturalW: frame.w, naturalH: frame.h,
+                         x:0, y:0, w:frame.w, h:frame.h, rot:0, z:0 });
+      } catch(err){ console.warn('Frame konnte nicht aus Video extrahiert werden', err); }
     }
-  });
+    if (!newTiles.length) return;
+    appendNewTilesToBlock(newTiles);
+    state.tiles.push(...newTiles);
+    dirty = true;
+    render();
+  }
 
   fileInput.addEventListener('change', e => {
     addFiles(e.target.files);
     fileInput.value = '';
+  });
+
+  const videoInput = document.getElementById('videoInput');
+  videoInput.addEventListener('change', e => {
+    addVideoFiles(e.target.files);
+    videoInput.value = '';
   });
 
   // drag & drop from desktop
@@ -1284,84 +1069,84 @@
   }));
   stage.addEventListener('drop', e => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length){
+      const files = Array.from(e.dataTransfer.files);
+      const imgs = files.filter(f => f.type.startsWith('image/'));
+      const vids = files.filter(f => f.type.startsWith('video/'));
+      if (imgs.length) addFiles(imgs);
+      if (vids.length) addVideoFiles(vids);
+    }
+  });
+
+  // ---------- Row layout / Clear ----------
+  document.getElementById('reassembleBtn').addEventListener('click', () => {
+    if (!state.tiles.length) return;
+    layoutBlock();
+    render();
+  });
+
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    if (!state.tiles.length) return;
+    if (!confirm('Alle Fotos entfernen?')) return;
+    state.tiles = [];
+    state.selectedIds = new Set();
+    maxZ = 0;
+    viewZoom = 1;
+    dragMode = 'move';
+    blockCursor = { x:0, y:0, rowH:0 };
+    updateModeBadge();
+    render();
+    dirty = false;
   });
 
   // ---------- Export ----------
-  const DEFAULT_RES = 2.5;
-  const exportBtn = document.getElementById('exportBtn');
-  const exportPanel = document.getElementById('exportPanel');
-  const exportWidthInput = document.getElementById('exportWidthInput');
-  const exportHint = document.getElementById('exportHint');
-  const exportTransparent = document.getElementById('exportTransparent');
-  const exportConfirmBtn = document.getElementById('exportConfirmBtn');
-
-  function updateExportHint(){
-    const bw = Math.round(boardWidth());
-    const bh = Math.round(boardHeight());
-    if (!exportWidthInput.value) exportWidthInput.placeholder = Math.round(bw * DEFAULT_RES);
-    exportHint.textContent = 'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×).';
-  }
-
-  exportBtn.addEventListener('click', e => {
-    e.stopPropagation();
+  document.getElementById('exportBtn').addEventListener('click', async () => {
     if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
-    updateExportHint();
-    exportPanel.classList.toggle('open');
-  });
-  document.addEventListener('click', e => {
-    if (!exportPanel.contains(e.target) && e.target !== exportBtn) exportPanel.classList.remove('open');
-  });
-  exportPanel.addEventListener('click', e => e.stopPropagation());
-
-  exportConfirmBtn.addEventListener('click', async () => {
-    if (!state.tiles.length){ alert('Noch keine Fotos zum Exportieren.'); return; }
-    const originalText = exportConfirmBtn.textContent;
-    exportConfirmBtn.textContent = 'Exportiere…';
-    exportConfirmBtn.disabled = true;
+    const btn = document.getElementById('exportBtn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Exportiere…';
+    btn.disabled = true;
     try {
+      const RES = 2.5;
       const bw = boardWidth();
       const bh = boardHeight();
-      const targetWidth = parseFloat(exportWidthInput.value);
-      const RES = (targetWidth && targetWidth > 0) ? (targetWidth / bw) : DEFAULT_RES;
-      const transparent = exportTransparent.checked;
       const canvas = document.createElement('canvas');
-      canvas.width = Math.round(bw * RES);
-      canvas.height = Math.round(bh * RES);
+      canvas.width = bw * RES;
+      canvas.height = bh * RES;
       const ctx = canvas.getContext('2d');
-      if (!transparent){
-        ctx.fillStyle = boardColor;
-        ctx.fillRect(0,0,canvas.width,canvas.height);
-      }
+      ctx.fillStyle = boardColor;
+      ctx.fillRect(0,0,canvas.width,canvas.height);
 
       const ordered = [...state.tiles].sort((a,b) => a.z - b.z);
-      const results = await Promise.allSettled(ordered.map(t => new Promise((resolve,reject) => {
+      const images = await Promise.all(ordered.map(t => new Promise((resolve,reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = reject;
         img.src = t.url;
       })));
-      const skipped = results.filter(r => r.status === 'rejected').length;
 
       ordered.forEach((tile, i) => {
-        if (results[i].status !== 'fulfilled') return; // fehlendes Bild — bitte zuerst über "🔗 Verknüpfen" ersetzen
-        const img = results[i].value;
+        const img = images[i];
         ctx.save();
         ctx.translate((tile.x + tile.w/2) * RES, (tile.y + tile.h/2) * RES);
         ctx.rotate(tile.rot * Math.PI/180);
+        ctx.translate(-tile.w/2 * RES, -tile.h/2 * RES); // local origin = tile's own top-left, matching curveCut coords
+
+        if (tile.curveCut){
+          applyCanvasCurveClip(ctx, tile.curveCut.points, tile.w, tile.h, RES);
+        }
+
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
         ctx.shadowBlur = 10 * RES;
         ctx.shadowOffsetY = 3 * RES;
 
         const iw = tile.w * RES, ih = tile.h * RES;
-        ensureCropDefaults(tile);
-        // read exactly the source rectangle that's visible on screen for this tile's
-        // current crop/offset — keeps the export pixel-identical to what's shown live
-        const sx = -tile.imgOffsetX / tile.imgScale;
-        const sy = -tile.imgOffsetY / tile.imgScale;
-        const sw = tile.w / tile.imgScale;
-        const sh = tile.h / tile.imgScale;
-        ctx.drawImage(img, sx, sy, sw, sh, -iw/2, -ih/2, iw, ih);
+        // object-fit: cover
+        const scale = Math.max(iw / img.naturalWidth, ih / img.naturalHeight);
+        const sw = iw/scale, sh = ih/scale;
+        const sx = (img.naturalWidth - sw)/2, sy = (img.naturalHeight - sh)/2;
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, iw, ih);
         ctx.restore();
       });
 
@@ -1372,29 +1157,24 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
-        if (skipped) alert(skipped + ' Bild' + (skipped === 1 ? ' fehlt' : 'er fehlen') + ' und wurde' + (skipped === 1 ? '' : 'n') + ' im Export ausgelassen. Nutze "🔗 Verknüpfen", um sie wiederzufinden, dann erneut exportieren.');
       }, 'image/png');
-      exportPanel.classList.remove('open');
     } catch(err){
       console.error(err);
       alert('Export fehlgeschlagen.');
     } finally {
-      exportConfirmBtn.textContent = originalText;
-      exportConfirmBtn.disabled = false;
+      btn.textContent = originalText;
+      btn.disabled = false;
     }
   });
 
   // ---------- Save / Load projects (IndexedDB — named, multiple slots, keeps the actual photos) ----------
   function openDB(){
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('joiner-db', 3);
+      const req = indexedDB.open('joiner-db', 2);
       req.onupgradeneeded = (e) => {
         const db = req.result;
         if (!db.objectStoreNames.contains('projects')){
           db.createObjectStore('projects', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('bins')){
-          db.createObjectStore('bins', { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -1416,79 +1196,18 @@
     return 'Collage ' + date + ' ' + time;
   }
 
-  // Writes the current board as a project record under a specific id — used both for
-  // brand-new projects (fresh id) and for silently overwriting the currently open one
-  // (same id, so "💾 Speichern" never creates a duplicate once a project is established).
-  async function putProjectRecord(id, name, folder){
+  async function saveProjectAs(name){
     const db = await openDB();
     const tx = db.transaction('projects', 'readwrite');
-    tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor,
-      // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
-      // handle when available, otherwise just the filename), never a copy of the pixels.
-      // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
-      dirHandles: usedDirHandles(),
-      tiles: state.tiles.map(t => ({
-        id: t.id, filename: t.filename || (t.blob && t.blob.name) || null,
-        handle: t.handle || null, dirId: t.dirId != null ? t.dirId : null, relPath: t.relPath || null,
-        x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
-        naturalW:t.naturalW, naturalH:t.naturalH,
-        imgScale: t.imgScale != null ? t.imgScale : null,
-        imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
-        imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null
-      }))
-    });
-    await txDone(tx);
-    db.close();
-  }
-
-  function updateCurrentProjectLabel(){
-    const el = document.getElementById('currentProjectLabel');
-    if (!el) return;
-    if (state.currentProjectId) el.textContent = '· ' + state.currentProjectName;
-    else if (state.pendingName) el.textContent = '· ' + state.pendingName + ' (neu)';
-    else el.textContent = '';
-  }
-
-  // Creates a project directly in the database from a set of {file, handle, dirId, relPath}
-  // items — used when a folder is dropped onto the Media panel, without touching whatever
-  // is currently open on the board.
-  async function saveProjectFromItems(name, folder, tileItems, dirHandles){
-    let x = 0, y = 0, rowH = 0, z = 0;
-    const tiles = [];
-    for (const it of tileItems){
-      const dims = await new Promise(resolve => {
-        const url = URL.createObjectURL(it.file);
-        const img = new Image();
-        img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(url); };
-        img.onerror = () => { resolve(null); URL.revokeObjectURL(url); };
-        img.src = url;
-      });
-      if (!dims) continue;
-      const scale = ROW_HEIGHT / dims.h;
-      const w = dims.w * scale, h = ROW_HEIGHT;
-      if (x > 0 && x + w > BLOCK_WRAP_WIDTH){ y += rowH + ROW_GAP; x = 0; rowH = 0; }
-      tiles.push({
-        id: 't' + (uid++), filename: it.file.name, handle: it.handle || null,
-        dirId: it.dirId != null ? it.dirId : null, relPath: it.relPath || null,
-        x, y, w, h, rot: 0, z: ++z, naturalW: dims.w, naturalH: dims.h,
-        imgScale: scale, imgOffsetX: 0, imgOffsetY: 0
-      });
-      x += w + ROW_GAP;
-      rowH = Math.max(rowH, h);
-    }
-    if (!tiles.length) return null;
-
-    const db = await openDB();
-    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
     const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-    tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: '#121214',
-      dirHandles: dirHandles || [], tiles
+    store.put({
+      id, name, savedAt: Date.now(), color: boardColor,
+      tiles: state.tiles.map(t => ({ id:t.id, blob:t.blob, x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
+                                      naturalW:t.naturalW, naturalH:t.naturalH, curveCut:t.curveCut || null }))
     });
     await txDone(tx);
     db.close();
-    return id;
   }
 
   async function listProjects(){
@@ -1514,50 +1233,12 @@
     db.close();
     if (!record) return false;
 
-    // one permission check per directory (not per photo) — this is what keeps
-    // reconnecting e.g. 40 photos from the same trip folder down to a single prompt
-    const dirGrant = new Map(); // dirId -> handle-if-granted-or-null
-    for (const d of (record.dirHandles || [])){
-      try {
-        let perm = await d.handle.queryPermission({ mode: 'read' });
-        if (perm !== 'granted') perm = await d.handle.requestPermission({ mode: 'read' });
-        dirGrant.set(d.id, perm === 'granted' ? d.handle : null);
-      } catch(err){ dirGrant.set(d.id, null); }
-    }
-    state.dirHandles = (record.dirHandles || []).filter(d => dirGrant.get(d.id));
-
-    const tiles = [];
-    for (const r of record.tiles){
-      let blob = r.blob || null; // old-style saves from before lean storage still work directly
-      let broken = false;
-      if (!blob && r.dirId != null && dirGrant.get(r.dirId) && r.relPath){
-        try {
-          const resolved = await resolveFileInDir(dirGrant.get(r.dirId), r.relPath);
-          blob = resolved.file;
-          r.handle = resolved.fileHandle; // keep for relink/backup convenience
-        } catch(err){ broken = true; }
-      } else if (!blob && r.handle){
-        try {
-          let perm = await r.handle.queryPermission({ mode: 'read' });
-          if (perm !== 'granted') perm = await r.handle.requestPermission({ mode: 'read' });
-          if (perm === 'granted') blob = await r.handle.getFile();
-          else broken = true;
-        } catch(err){ broken = true; }
-      } else if (!blob){
-        broken = true; // no embedded copy and no way to relocate it — needs a manual relink
-      }
-      tiles.push({
-        id: r.id, url: blob ? URL.createObjectURL(blob) : '', blob, handle: r.handle || null,
-        dirId: r.dirId != null ? r.dirId : null, relPath: r.relPath || null,
-        filename: r.filename || (blob && blob.name) || null, broken,
-        naturalW: r.naturalW, naturalH: r.naturalH,
-        imgScale: r.imgScale != null ? r.imgScale : null,
-        imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : null,
-        imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : null,
-        x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
-      });
-    }
-    state.tiles = tiles;
+    state.tiles = record.tiles.map(r => ({
+      id: r.id, url: URL.createObjectURL(r.blob), blob: r.blob,
+      naturalW: r.naturalW, naturalH: r.naturalH,
+      x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z,
+      curveCut: r.curveCut || null
+    }));
     maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
     const nums = state.tiles.map(t => parseInt(t.id.replace('t',''), 10) || 0);
     uid = (nums.length ? Math.max(...nums) : 0) + 1;
@@ -1568,14 +1249,10 @@
     viewZoom = 1;
     dragMode = 'move';
     if (record.color) setBoardColor(record.color);
-    state.currentProjectId = record.id;
-    state.currentProjectName = record.name;
-    state.currentProjectFolder = record.folder || '';
-    state.pendingName = null;
-    state.pendingFolder = null;
-    updateCurrentProjectLabel();
+    currentProjectName = record.name || '';
     updateModeBadge();
     render();
+    dirty = false;
     return true;
   }
 
@@ -1587,156 +1264,16 @@
     db.close();
   }
 
-  async function updateProjectFolder(id, folder){
-    const db = await openDB();
-    const tx = db.transaction('projects', 'readwrite');
-    const store = tx.objectStore('projects');
-    const record = await new Promise((resolve, reject) => {
-      const req = store.get(id);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    if (record){ record.folder = folder; store.put(record); }
-    await txDone(tx);
-    db.close();
-  }
-
-  // ---------- Bins (Media tree) ----------
-  async function listBins(){
-    const db = await openDB();
-    const tx = db.transaction('bins', 'readonly');
-    const records = await new Promise((resolve, reject) => {
-      const req = tx.objectStore('bins').getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    db.close();
-    return records.sort((a,b) => (a.order||0) - (b.order||0));
-  }
-
-  async function createBin(name){
-    const db = await openDB();
-    const tx = db.transaction('bins', 'readwrite');
-    const store = tx.objectStore('bins');
-    const existing = await new Promise((resolve, reject) => {
-      const req = store.getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    const id = 'b' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-    const maxOrder = existing.reduce((m,b) => Math.max(m, b.order||0), 0);
-    store.put({ id, name, order: maxOrder + 1 });
-    await txDone(tx);
-    db.close();
-    return id;
-  }
-
-  // creates the bin only if a bin with this name doesn't already exist — used when
-  // a project gets filed into a bin that only existed "virtually" (implied by an old save)
-  async function ensureBinExists(name){
-    const bins = await listBins();
-    const found = bins.find(b => b.name === name);
-    if (found) return found.id;
-    return await createBin(name);
-  }
-
-  async function deleteBin(id){
-    const db = await openDB();
-    const tx = db.transaction('bins', 'readwrite');
-    tx.objectStore('bins').delete(id);
-    await txDone(tx);
-    db.close();
-  }
-
-  async function moveBinBefore(draggedId, targetId){
-    if (draggedId.startsWith('virtual-') || targetId.startsWith('virtual-') || draggedId === targetId) return;
-    const bins = await listBins();
-    const ids = bins.map(b => b.id);
-    const withoutDragged = ids.filter(id => id !== draggedId);
-    const targetIdx = withoutDragged.indexOf(targetId);
-    withoutDragged.splice(targetIdx, 0, draggedId);
-    const db = await openDB();
-    const tx = db.transaction('bins', 'readwrite');
-    const store = tx.objectStore('bins');
-    for (let i = 0; i < withoutDragged.length; i++){
-      const rec = await new Promise((resolve, reject) => {
-        const req = store.get(withoutDragged[i]);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-      if (rec){ rec.order = i; store.put(rec); }
-    }
-    await txDone(tx);
-    db.close();
-  }
-
-  // Removes the embedded photo copy from a project's tiles, keeping only the filename
-  // (and handle/dirId/relPath if it happens to have one already). No folder dialog, no
-  // rewriting to disk — for when you already have the originals elsewhere and just want
-  // the database entry to shrink. If a tile has no link afterward, it'll show as "missing"
-  // next time you load the project — use "🔗 Verknüpfen" then if you ever need it back.
-  async function stripEmbeddedCopies(project){
-    const db = await openDB();
-    const tx = db.transaction('projects', 'readwrite');
-    const newTiles = project.tiles.map(t => {
-      if (!t.blob) return t;
-      const { blob, ...rest } = t;
-      return rest;
-    });
-    tx.objectStore('projects').put({
-      id: project.id, name: project.name, folder: project.folder || '', savedAt: project.savedAt,
-      color: project.color, dirHandles: project.dirHandles || [], tiles: newTiles
-    });
-    await txDone(tx);
-    db.close();
-  }
-
-  // Runs stripEmbeddedCopies on every project that still has embedded copies, in one go.
-  async function stripAllEmbeddedCopies(){
-    const projects = await listProjects();
-    const heavy = projects.filter(p => p.tiles.some(t => t.blob));
-    if (!heavy.length){ alert('Keine eingebetteten Kopien gefunden — alles schon schlank.'); return; }
-    if (!confirm(heavy.length + ' Projekt(e) haben noch eingebettete Fotokopien. Diese jetzt entfernen? (Die Originale bleiben unangetastet, falls du sie noch anderswo hast — nur die doppelte Kopie in der App verschwindet.)')) return;
-    for (const p of heavy) await stripEmbeddedCopies(p);
-    alert(heavy.length + ' Projekt(e) verschlankt.');
-    openLoadModal();
-  }
-
-  let lastUsedFolder = '';
   document.getElementById('saveBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveBtn');
     const original = btn.textContent;
+    const name = prompt('Name für diesen Stand:', currentProjectName || defaultProjectName());
+    if (name === null) return; // cancelled
+    const finalName = name.trim() || defaultProjectName();
     try {
-      let id = state.currentProjectId;
-      let name = state.currentProjectName;
-      let folder = state.currentProjectFolder;
-
-      if (!id){
-        if (state.pendingName != null){
-          // came from "+ Neue Collage" — name/bin already chosen, nothing to ask
-          name = state.pendingName;
-          folder = state.pendingFolder || '';
-        } else {
-          // no project established yet (e.g. photos added without going through "+ Neue Collage") — ask once
-          const n = prompt('Name für diese Collage:', defaultProjectName());
-          if (n === null) return;
-          name = n.trim() || defaultProjectName();
-          const f = prompt('Bin (optional, z. B. "Azoren") — leer lassen für "Ohne Bin":', lastUsedFolder);
-          if (f === null) return;
-          folder = f.trim();
-        }
-        id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-        lastUsedFolder = folder;
-        if (folder) await ensureBinExists(folder);
-        state.currentProjectId = id;
-        state.currentProjectName = name;
-        state.currentProjectFolder = folder;
-        state.pendingName = null;
-        state.pendingFolder = null;
-      }
-
-      await putProjectRecord(id, name, folder);
-      updateCurrentProjectLabel();
+      await saveProjectAs(finalName);
+      currentProjectName = finalName;
+      dirty = false;
       btn.textContent = '✓ Gespeichert';
     } catch(err){
       console.error(err);
@@ -1747,928 +1284,119 @@
 
   const loadModalOverlay = document.getElementById('loadModalOverlay');
   const projectList = document.getElementById('projectList');
-  const mediaDropzone = document.getElementById('mediaDropzone');
-  const collapsedBins = new Set(); // stays collapsed/expanded while the app is open
-  let draggedProjectId = null;
-  let draggedBinId = null;
-  const selectedProjectIds = new Set(); // checked in the tree, for bulk relink
-
-  function buildProjectRow(p){
-    const row = document.createElement('div');
-    row.className = 'project-row';
-    row.draggable = true;
-
-    row.addEventListener('dragstart', e => {
-      draggedProjectId = p.id;
-      row.classList.add('dragging-row');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', p.id); } catch(err){}
-    });
-    row.addEventListener('dragend', () => { row.classList.remove('dragging-row'); draggedProjectId = null; });
-
-    const info = document.createElement('div');
-    info.className = 'project-info';
-    const titleRow = document.createElement('div');
-    titleRow.style.display = 'flex';
-    titleRow.style.alignItems = 'center';
-    titleRow.style.gap = '7px';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = selectedProjectIds.has(p.id);
-    checkbox.title = 'Für Mehrfach-Verknüpfen auswählen';
-    checkbox.addEventListener('click', e => e.stopPropagation());
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) selectedProjectIds.add(p.id); else selectedProjectIds.delete(p.id);
-      updateRelinkAllLabel();
-    });
-    const title = document.createElement('div');
-    title.className = 'project-name';
-    title.textContent = p.name;
-    titleRow.appendChild(checkbox);
-    titleRow.appendChild(title);
-    const meta = document.createElement('div');
-    meta.className = 'project-meta';
-    const count = p.tiles.length;
-    const isHeavy = p.tiles.some(t => t.blob);
-    meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos') + (isHeavy ? ' · eingebettet (doppelt)' : '');
-    info.appendChild(titleRow); info.appendChild(meta);
-
-    const actions = document.createElement('div');
-    actions.className = 'project-actions';
-
-    if (isHeavy){
-      const stripBtnEl = document.createElement('button');
-      stripBtnEl.className = 'btn btn-ghost';
-      stripBtnEl.textContent = '🗑️ Kopie entfernen';
-      stripBtnEl.title = 'Eingebettete Fotokopie aus der Datenbank löschen, um Platz zu sparen — nur sinnvoll, wenn du die Originale noch anderswo hast';
-      stripBtnEl.addEventListener('click', async () => {
-        if (!confirm('Eingebettete Kopie(n) aus „' + p.name + '“ entfernen? Nur die doppelte Kopie in der App verschwindet — falls du die Originale nicht mehr hast, zeigt die Kachel danach "fehlt" an.')) return;
-        await stripEmbeddedCopies(p);
-        openLoadModal();
-      });
-      actions.appendChild(stripBtnEl);
-    }
-
-    const loadBtnEl = document.createElement('button');
-    loadBtnEl.className = 'btn btn-gold-outline';
-    loadBtnEl.textContent = 'Laden';
-    loadBtnEl.addEventListener('click', async () => {
-      if (state.tiles.length && !confirm('Aktuellen Stand ersetzen mit „' + p.name + '“?')) return;
-      if (state.tiles.length) pushUndo();
-      await loadProjectById(p.id);
-      closeLoadModal();
-    });
-
-    const delBtnEl = document.createElement('button');
-    delBtnEl.className = 'btn btn-ghost';
-    delBtnEl.textContent = 'Löschen';
-    delBtnEl.addEventListener('click', async () => {
-      if (!confirm('„' + p.name + '“ endgültig löschen?')) return;
-      await deleteProjectById(p.id);
-      if (state.currentProjectId === p.id){
-        state.currentProjectId = null;
-        state.currentProjectName = null;
-        state.currentProjectFolder = null;
-        updateCurrentProjectLabel();
-      }
-      openLoadModal();
-    });
-
-    actions.appendChild(loadBtnEl);
-    actions.appendChild(delBtnEl);
-    row.appendChild(info);
-    row.appendChild(actions);
-    return row;
-  }
-
-  function buildBinElement(bin, projectsInBin){
-    const wrap = document.createElement('div');
-    wrap.className = 'bin';
-    const isReal = !bin.virtual;
-    wrap.draggable = isReal;
-
-    wrap.addEventListener('dragstart', e => {
-      if (!isReal) return;
-      draggedBinId = bin.id;
-      wrap.classList.add('dragging-bin');
-      e.stopPropagation();
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', bin.id); } catch(err){}
-    });
-    wrap.addEventListener('dragend', () => { wrap.classList.remove('dragging-bin'); draggedBinId = null; });
-
-    const header = document.createElement('div');
-    header.className = 'bin-header' + (collapsedBins.has(bin.id) ? ' collapsed' : '');
-    const chevron = document.createElement('span');
-    chevron.className = 'chevron';
-    chevron.textContent = '▾';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'bin-name';
-    nameEl.textContent = '📁 ' + bin.name;
-    const countEl = document.createElement('span');
-    countEl.className = 'bin-count';
-    countEl.textContent = String(projectsInBin.length);
-    const delBtn = document.createElement('button');
-    delBtn.className = 'bin-del';
-    delBtn.textContent = '×';
-    delBtn.title = 'Bin löschen (Projekte bleiben erhalten, werden zu „Ohne Bin“)';
-    delBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      if (!confirm('Bin „' + bin.name + '“ löschen? Die ' + projectsInBin.length + ' Projekte darin bleiben erhalten und werden zu „Ohne Bin“.')) return;
-      for (const p of projectsInBin) await updateProjectFolder(p.id, '');
-      if (isReal) await deleteBin(bin.id);
-      openLoadModal();
-    });
-    header.appendChild(chevron); header.appendChild(nameEl); header.appendChild(countEl); header.appendChild(delBtn);
-    header.addEventListener('click', () => {
-      if (collapsedBins.has(bin.id)) collapsedBins.delete(bin.id); else collapsedBins.add(bin.id);
-      openLoadModal();
-    });
-
-    const children = document.createElement('div');
-    children.className = 'bin-children';
-    children.style.display = collapsedBins.has(bin.id) ? 'none' : '';
-    projectsInBin.forEach(p => children.appendChild(buildProjectRow(p)));
-
-    wrap.appendChild(header);
-    wrap.appendChild(children);
-
-    wrap.addEventListener('dragover', e => {
-      if (draggedProjectId || (draggedBinId && draggedBinId !== bin.id)){
-        e.preventDefault();
-        wrap.classList.add('dragover-bin');
-      }
-    });
-    wrap.addEventListener('dragleave', e => { if (e.target === wrap) wrap.classList.remove('dragover-bin'); });
-    wrap.addEventListener('drop', async e => {
-      e.preventDefault();
-      e.stopPropagation();
-      wrap.classList.remove('dragover-bin');
-      if (draggedProjectId){
-        const pid = draggedProjectId;
-        draggedProjectId = null;
-        if (!isReal) await ensureBinExists(bin.name);
-        await updateProjectFolder(pid, bin.name);
-        if (state.currentProjectId === pid){ state.currentProjectFolder = bin.name; updateCurrentProjectLabel(); }
-        openLoadModal();
-        return;
-      }
-      if (draggedBinId && draggedBinId !== bin.id){
-        const did = draggedBinId;
-        draggedBinId = null;
-        await moveBinBefore(did, bin.id);
-        openLoadModal();
-        return;
-      }
-      // otherwise: folders/files dragged straight from Finder onto this bin
-      if (e.dataTransfer && e.dataTransfer.items && e.dataTransfer.items.length){
-        await handleMediaDrop(e.dataTransfer, bin.name);
-      }
-    });
-
-    return wrap;
-  }
 
   async function openLoadModal(){
-    projectList.innerHTML = '<p class="modal-empty">Lade…</p>';
+    projectList.innerHTML = '<p class="modal-empty">Lade Liste…</p>';
     loadModalOverlay.style.display = 'flex';
-    let projects, bins;
-    try {
-      projects = await listProjects();
-      bins = await listBins();
-    } catch(err){ console.error(err); projectList.innerHTML = '<p class="modal-empty">Fehler beim Laden.</p>'; return; }
+    let projects;
+    try { projects = await listProjects(); }
+    catch(err){ console.error(err); projectList.innerHTML = '<p class="modal-empty">Fehler beim Laden der Liste.</p>'; return; }
 
-    // folders used by older saves that were never explicitly created as a bin still show up,
-    // just not draggable/deletable as a "real" bin until something is dropped on them
-    const binNames = new Set(bins.map(b => b.name));
-    new Set(projects.map(p => p.folder).filter(Boolean)).forEach(name => {
-      if (!binNames.has(name)) bins.push({ id: 'virtual-' + name, name, order: 9999, virtual: true });
-    });
-    bins.sort((a,b) => (a.order||0) - (b.order||0));
-
-    projectList.innerHTML = '';
-    bins.forEach(bin => {
-      projectList.appendChild(buildBinElement(bin, projects.filter(p => p.folder === bin.name)));
-    });
-
-    const unfiled = projects.filter(p => !p.folder);
-    const unfiledWrap = document.createElement('div');
-    unfiledWrap.className = 'bin';
-    const uHeader = document.createElement('div');
-    uHeader.className = 'unfiled-header';
-    uHeader.textContent = 'Ohne Bin';
-    unfiledWrap.appendChild(uHeader);
-    const uChildren = document.createElement('div');
-    uChildren.className = 'bin-children';
-    unfiled.forEach(p => uChildren.appendChild(buildProjectRow(p)));
-    if (!unfiled.length && !bins.length){
-      const hint = document.createElement('p');
-      hint.className = 'modal-empty';
-      hint.textContent = 'Noch nichts hier. Zieh oben einen Ordner mit Fotos rein, oder leg mit "+ Bin" eine Kategorie an.';
-      uChildren.appendChild(hint);
+    if (!projects.length){
+      projectList.innerHTML = '<p class="modal-empty">Noch keine gespeicherten Collagen.</p>';
+      return;
     }
-    unfiledWrap.appendChild(uChildren);
-    unfiledWrap.addEventListener('dragover', e => { if (draggedProjectId){ e.preventDefault(); unfiledWrap.classList.add('dragover-bin'); } });
-    unfiledWrap.addEventListener('dragleave', e => { if (e.target === unfiledWrap) unfiledWrap.classList.remove('dragover-bin'); });
-    unfiledWrap.addEventListener('drop', async e => {
-      e.preventDefault();
-      unfiledWrap.classList.remove('dragover-bin');
-      if (draggedProjectId){
-        const pid = draggedProjectId;
-        draggedProjectId = null;
-        await updateProjectFolder(pid, '');
-        if (state.currentProjectId === pid){ state.currentProjectFolder = ''; updateCurrentProjectLabel(); }
+    projectList.innerHTML = '';
+    projects.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'project-row';
+
+      const info = document.createElement('div');
+      info.className = 'project-info';
+      const title = document.createElement('div');
+      title.className = 'project-name';
+      title.textContent = p.name;
+      const meta = document.createElement('div');
+      meta.className = 'project-meta';
+      const count = p.tiles.length;
+      meta.textContent = new Date(p.savedAt).toLocaleString('de-DE') + ' · ' + count + (count === 1 ? ' Foto' : ' Fotos');
+      info.appendChild(title); info.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'project-actions';
+
+      const loadBtnEl = document.createElement('button');
+      loadBtnEl.className = 'btn btn-gold-outline';
+      loadBtnEl.textContent = 'Laden';
+      loadBtnEl.addEventListener('click', async () => {
+        if (state.tiles.length && !confirm('Aktuellen Stand ersetzen mit „' + p.name + '“?')) return;
+        await loadProjectById(p.id);
+        closeLoadModal();
+      });
+
+      const delBtnEl = document.createElement('button');
+      delBtnEl.className = 'btn btn-ghost';
+      delBtnEl.textContent = 'Löschen';
+      delBtnEl.addEventListener('click', async () => {
+        if (!confirm('„' + p.name + '“ endgültig löschen?')) return;
+        await deleteProjectById(p.id);
         openLoadModal();
-      }
+      });
+
+      actions.appendChild(loadBtnEl);
+      actions.appendChild(delBtnEl);
+      row.appendChild(info);
+      row.appendChild(actions);
+      projectList.appendChild(row);
     });
-    projectList.appendChild(unfiledWrap);
   }
 
   function closeLoadModal(){ loadModalOverlay.style.display = 'none'; }
-
-  document.getElementById('newCollageBtn').addEventListener('click', async () => {
-    if (state.tiles.length){
-      const warn = state.currentProjectId
-        ? 'Neue Collage anlegen? Die Fläche wird geleert (der aktuelle Stand ist unter „' + state.currentProjectName + '“ gespeichert, sofern du zuletzt gesichert hast).'
-        : 'Neue Collage anlegen? Die Fläche wird geleert — nicht gespeicherte Fotos gehen dabei verloren.';
-      if (!confirm(warn)) return;
-    }
-
-    const name = prompt('Name der neuen Collage:', defaultProjectName());
-    if (name === null) return;
-    const finalName = name.trim() || defaultProjectName();
-
-    if (state.tiles.length) pushUndo();
-    state.tiles = [];
-    state.selectedIds = new Set();
-    state.dirHandles = [];
-    maxZ = 0; viewZoom = 1; dragMode = 'move';
-    blockCursor = { x:0, y:0, rowH:0 };
-    updateModeBadge();
-    setBoardColor('#121214');
-
-    state.currentProjectId = null;
-    state.currentProjectName = null;
-    state.currentProjectFolder = null;
-    state.pendingName = finalName;
-    state.pendingFolder = ''; // no bin yet — drag it into one from the Media panel whenever you like
-    updateCurrentProjectLabel();
-    render();
-  });
-
-  // ---------- Video → Standbilder ----------
-  function waitForEvent(el, evt){
-    return new Promise(resolve => { el.addEventListener(evt, resolve, { once: true }); });
-  }
-
-  async function extractFramesFromVideo(file, stepSeconds, destDirHandle, onProgress){
-    const video = document.createElement('video');
-    video.style.display = 'none';
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-    document.body.appendChild(video);
-    const url = URL.createObjectURL(file);
-    video.src = url;
-
-    try {
-      await Promise.race([
-        waitForEvent(video, 'loadedmetadata'),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Video konnte nicht gelesen werden (Zeitüberschreitung).')), 15000))
-      ]);
-      const duration = video.duration;
-      const vw = video.videoWidth, vh = video.videoHeight;
-      if (!duration || !isFinite(duration) || !vw || !vh) throw new Error('Video-Metadaten (Länge/Größe) konnten nicht gelesen werden.');
-
-      const canvas = document.createElement('canvas');
-      canvas.width = vw; canvas.height = vh;
-      const ctx = canvas.getContext('2d');
-      const baseName = (file.name || 'video').replace(/\.[a-z0-9]+$/i, '');
-
-      const tileItems = []; // {file, handle, relPath} — real files on disk, not just in-memory blobs
-      let t = 0, idx = 0;
-      while (t < duration){
-        video.currentTime = Math.min(t, Math.max(0, duration - 0.05));
-        await Promise.race([
-          waitForEvent(video, 'seeked'),
-          new Promise(r => setTimeout(r, 2000)) // don't hang forever on a stubborn seek
-        ]);
-        ctx.drawImage(video, 0, 0, vw, vh);
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
-        if (blob){
-          idx++;
-          const filename = baseName + '_' + String(idx).padStart(4,'0') + '.jpg';
-          const fileHandle = await destDirHandle.getFileHandle(filename, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          const namedFile = new File([blob], filename, { type: 'image/jpeg' });
-          tileItems.push({ file: namedFile, handle: fileHandle, relPath: filename });
-          if (onProgress) onProgress(idx, Math.ceil(duration / stepSeconds));
-        }
-        t += stepSeconds;
-        await tick();
-      }
-      return tileItems;
-    } finally {
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-      video.remove();
-      URL.revokeObjectURL(url);
-    }
-  }
-
-  const videoInput = document.getElementById('videoInput');
-  const videoExtractBtn = document.getElementById('videoExtractBtn');
-  const videoExtractBtnDefaultText = videoExtractBtn.textContent;
-  let pendingVideoJob = null; // {file, stepSeconds, projectName, nameGuess} — waiting for the folder-pick click
-
-  async function runVideoExtraction(file, stepSeconds, projectName, nameGuess, destDirHandle){
-    setBackupStatus('Lese Video-Länge…');
-    videoExtractBtn.disabled = true;
-    try {
-      // quick metadata peek just to give an upfront estimate and a sanity check before committing
-      const probe = document.createElement('video');
-      probe.preload = 'metadata';
-      probe.muted = true;
-      const probeUrl = URL.createObjectURL(file);
-      probe.src = probeUrl;
-      await Promise.race([ waitForEvent(probe, 'loadedmetadata'), new Promise((_,r)=>setTimeout(()=>r(),8000)) ]);
-      const estCount = probe.duration && isFinite(probe.duration) ? Math.ceil(probe.duration / stepSeconds) : null;
-      URL.revokeObjectURL(probeUrl);
-      probe.remove();
-
-      if (estCount != null){
-        const warn = estCount > 250 ? ('\n\n⚠️ Das sind sehr viele Standbilder — das kann eine Weile dauern und viel Platz brauchen.') : '';
-        if (!confirm('Video ist ca. ' + Math.round(probe.duration) + 's lang → ergibt etwa ' + estCount + ' Standbilder (alle ' + stepSeconds.toFixed(2) + 's), gespeichert in „' + destDirHandle.name + '“.' + warn + '\n\nFortfahren?')) {
-          setBackupStatus('');
-          return;
-        }
-      }
-
-      const tileItems = await extractFramesFromVideo(file, stepSeconds, destDirHandle, (done, total) => {
-        setBackupStatus('Extrahiere Standbilder … ' + done + (total ? ' / ' + total : '') + ' (schreibe nach „' + destDirHandle.name + '“)');
-      });
-      if (!tileItems.length){ alert('Es konnten keine Standbilder extrahiert werden.'); setBackupStatus(''); return; }
-
-      setBackupStatus('Lege Projekt an …');
-      const dirId = registerDirHandle(destDirHandle, destDirHandle.name);
-      const linkedTileItems = tileItems.map(t => ({ file: t.file, handle: t.handle, dirId, relPath: t.relPath }));
-      const id = await saveProjectFromItems(projectName.trim() || nameGuess, '', linkedTileItems, [{ id: dirId, handle: destDirHandle, name: destDirHandle.name }]);
-      setBackupStatus(id ? ('✓ ' + tileItems.length + ' Standbilder in „' + destDirHandle.name + '“ gespeichert und mit „' + (projectName.trim() || nameGuess) + '“ verknüpft.') : 'Fehlgeschlagen.');
-      setTimeout(() => setBackupStatus(''), 6000);
-      openLoadModal();
-    } catch(err){
-      console.error(err);
-      alert('Extraktion fehlgeschlagen: ' + err.message);
-      setBackupStatus('');
-    } finally {
-      videoExtractBtn.disabled = false;
-    }
-  }
-
-  videoExtractBtn.addEventListener('click', async () => {
-    // second click (after the settings prompts): THIS is a genuine fresh user gesture,
-    // so the folder picker gets called as the very first thing inside it — Chrome refuses
-    // to open it otherwise (a file-input's "change" event doesn't count as one).
-    if (pendingVideoJob){
-      const job = pendingVideoJob;
-      pendingVideoJob = null;
-      videoExtractBtn.textContent = videoExtractBtnDefaultText;
-      let destDirHandle;
-      try {
-        destDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      } catch(err){
-        if (err && err.name === 'AbortError') return; // cancelled — nothing to report
-        console.error(err);
-        alert('Ordner-Auswahl fehlgeschlagen: ' + (err && err.message ? err.message : err));
-        return;
-      }
-      await runVideoExtraction(job.file, job.stepSeconds, job.projectName, job.nameGuess, destDirHandle);
-      return;
-    }
-    videoInput.click();
-  });
-
-  videoInput.addEventListener('change', () => {
-    const file = videoInput.files && videoInput.files[0];
-    videoInput.value = '';
-    if (!file) return;
-
-    if (!window.showDirectoryPicker){
-      alert('Diese Funktion braucht die Dateisystem-Funktionen von aktuellem Chrome.');
-      return;
-    }
-
-    const fpsStr = prompt('Bilder pro Sekunde des Videos (fps) — z. B. 25 für Broadcast-Material:', '25');
-    if (fpsStr === null) return;
-    const fps = parseFloat(fpsStr) || 25;
-
-    const everyStr = prompt('Jedes wievielte Bild als Standbild? (z. B. 12 = alle 12 Frames ein Foto):', '12');
-    if (everyStr === null) return;
-    const everyN = Math.max(1, parseInt(everyStr, 10) || 12);
-    const stepSeconds = everyN / fps;
-
-    const nameGuess = file.name.replace(/\.[a-z0-9]+$/i, '') + ' — Standbilder';
-    const projectName = prompt('Name für das neue Projekt mit den Standbildern:', nameGuess);
-    if (projectName === null) return;
-
-    pendingVideoJob = { file, stepSeconds, projectName, nameGuess };
-    videoExtractBtn.textContent = '📁 Jetzt klicken: Ordner wählen';
-    alert('Fast fertig — klick jetzt direkt auf „📁 Jetzt klicken: Ordner wählen“ oben in der Leiste, um den Zielordner für die Standbilder auszuwählen.');
-  });
-
-  document.getElementById('addBinBtn').addEventListener('click', async () => {
-    const name = prompt('Name für den neuen Bin (z. B. "Azoren"):');
-    if (name === null || !name.trim()) return;
-    const bins = await listBins();
-    if (bins.some(b => b.name === name.trim())){ alert('Ein Bin mit diesem Namen gibt es schon.'); return; }
-    await createBin(name.trim());
-    openLoadModal();
-  });
-
-  document.getElementById('stripAllBtn').addEventListener('click', stripAllEmbeddedCopies);
-
-  const relinkAllBtn = document.getElementById('relinkAllBtn');
-  function updateRelinkAllLabel(){
-    relinkAllBtn.textContent = selectedProjectIds.size
-      ? '🔍 Verknüpfen (' + selectedProjectIds.size + ' ausgewählt)'
-      : '🔍 Verknüpfen (mehrere, Ordner durchsuchen)';
-  }
-  relinkAllBtn.addEventListener('click', relinkViaFolderSearch);
 
   document.getElementById('loadBtn').addEventListener('click', openLoadModal);
   document.getElementById('closeLoadModal').addEventListener('click', closeLoadModal);
   loadModalOverlay.addEventListener('pointerdown', e => { if (e.target === loadModalOverlay) closeLoadModal(); });
 
-  // Bulk relink: pick ONE parent folder, deep-scan it (any depth of subfolders), and
-  // match every missing photo across the chosen (or all-with-gaps) collages by filename.
-  async function relinkViaFolderSearch(){
-    if (!window.showDirectoryPicker){
-      alert('Diese Funktion braucht die Dateisystem-Funktionen von aktuellem Chrome.');
-      return;
-    }
-    const allProjects = await listProjects();
-    const targets = selectedProjectIds.size
-      ? allProjects.filter(p => selectedProjectIds.has(p.id))
-      : allProjects.filter(p => p.tiles.some(t => !t.blob));
-    if (!targets.length){
-      alert(selectedProjectIds.size
-        ? 'Die ausgewählten Collagen wurden nicht gefunden.'
-        : 'Nichts zu verknüpfen — keine Collage hat fehlende Fotos.');
-      return;
-    }
+  // ---------- New Collage ----------
+  const mediaChoiceOverlay = document.getElementById('mediaChoiceOverlay');
+  const mediaChoiceTitle = document.getElementById('mediaChoiceTitle');
 
-    let topHandle;
-    try { topHandle = await window.showDirectoryPicker(); }
-    catch(err){ return; } // cancelled
-
-    relinkAllBtn.disabled = true;
-    setBackupStatus('Durchsuche „' + topHandle.name + '“ (inkl. Unterordner)…');
-    try {
-      const index = await buildFilenameIndex(topHandle, 12, count => {
-        setBackupStatus('Durchsuche „' + topHandle.name + '“ — ' + count + ' Bild(er) gefunden…');
-      });
-      setBackupStatus(index.size + ' Bild(er) in „' + topHandle.name + '“ gefunden. Verknüpfe…');
-
-      const dirId = registerDirHandle(topHandle, topHandle.name);
-      let totalMatched = 0, totalMissing = 0;
-
-      for (const p of targets){
-        let changed = false;
-        const newTiles = p.tiles.map(t => {
-          if (t.blob) return t; // embedded copy already fine, leave untouched
-          const key = (t.filename || '').toLowerCase().trim();
-          const hit = key ? index.get(key) : null;
-          if (!hit){ totalMissing++; return t; }
-          changed = true;
-          totalMatched++;
-          return { ...t, handle: null, dirId, relPath: hit.relPath };
-        });
-        if (changed){
-          const otherDirHandles = (p.dirHandles || []).filter(d => d.id !== dirId);
-          const db = await openDB();
-          const tx = db.transaction('projects', 'readwrite');
-          tx.objectStore('projects').put({
-            id: p.id, name: p.name, folder: p.folder || '', savedAt: p.savedAt, color: p.color,
-            dirHandles: [...otherDirHandles, { id: dirId, handle: topHandle, name: topHandle.name }],
-            tiles: newTiles
-          });
-          await txDone(tx);
-          db.close();
-          if (state.currentProjectId === p.id) await loadProjectById(p.id); // refresh the live board too, if it's open
-        }
-        setBackupStatus('Verknüpfe „' + p.name + '“ …');
-        await tick();
-      }
-
-      selectedProjectIds.clear();
-      updateRelinkAllLabel();
-      setBackupStatus('✓ ' + totalMatched + ' Foto(s) verknüpft über ' + targets.length + ' Collage(n).' + (totalMissing ? ' ' + totalMissing + ' weiterhin nicht gefunden.' : ''));
-      setTimeout(() => setBackupStatus(''), 6000);
-      openLoadModal();
-    } catch(err){
-      console.error(err);
-      alert('Verknüpfen fehlgeschlagen: ' + err.message);
-      setBackupStatus('');
-    } finally {
-      relinkAllBtn.disabled = false;
-    }
+  function resetCanvasForNewCollage(){
+    state.tiles = [];
+    state.selectedIds = new Set();
+    maxZ = 0;
+    viewZoom = 1;
+    dragMode = 'move';
+    blockCursor = { x:0, y:0, rowH:0 };
+    updateModeBadge();
+    render();
+    dirty = false;
   }
 
-  // ---------- Dropping folders from Finder directly onto the Media panel ----------
-  ['dragenter','dragover'].forEach(evt => mediaDropzone.addEventListener(evt, e => {
-    e.preventDefault(); e.stopPropagation();
-    mediaDropzone.classList.add('dragover');
-  }));
-  ['dragleave'].forEach(evt => mediaDropzone.addEventListener(evt, e => {
-    if (e.target !== mediaDropzone) return;
-    mediaDropzone.classList.remove('dragover');
-  }));
-  mediaDropzone.addEventListener('drop', async e => {
+  document.getElementById('newCollageBtn').addEventListener('click', () => {
+    if (state.tiles.length && !confirm('Neue Collage beginnen? Nicht gespeicherte Änderungen gehen verloren.')) return;
+    resetCanvasForNewCollage();
+    const name = prompt('Name der neuen Collage:', defaultProjectName());
+    currentProjectName = (name && name.trim()) ? name.trim() : defaultProjectName();
+    mediaChoiceTitle.textContent = '„' + currentProjectName + '“ — Medien hinzufügen';
+    mediaChoiceOverlay.style.display = 'flex';
+  });
+
+  document.getElementById('choiceAddPhoto').addEventListener('click', () => {
+    mediaChoiceOverlay.style.display = 'none';
+    fileInput.click();
+  });
+  document.getElementById('choiceAddVideo').addEventListener('click', () => {
+    mediaChoiceOverlay.style.display = 'none';
+    videoInput.click();
+  });
+  document.getElementById('choiceSkip').addEventListener('click', () => {
+    mediaChoiceOverlay.style.display = 'none';
+  });
+  mediaChoiceOverlay.addEventListener('pointerdown', e => {
+    if (e.target === mediaChoiceOverlay) mediaChoiceOverlay.style.display = 'none';
+  });
+
+  // Ask before leaving the tab/browser if there's unsaved work.
+  // Browsers show their own fixed confirmation text (e.g. Chrome's generic
+  // "changes may not be saved") — the returnValue string itself is ignored by design.
+  window.addEventListener('beforeunload', e => {
+    if (!dirty) return;
     e.preventDefault();
-    mediaDropzone.classList.remove('dragover');
-    await handleMediaDrop(e.dataTransfer, null);
-  });
-
-  // legacy fallback (non-Chrome, or older Chrome) — reads one level of a dropped folder
-  // into plain File objects; no persistent handle, so it won't auto-reconnect next session
-  function readEntryFilesLegacy(dirEntry){
-    return new Promise(resolve => {
-      const reader = dirEntry.createReader();
-      const all = [];
-      function readBatch(){
-        reader.readEntries(async entries => {
-          if (!entries.length){ resolve(all); return; }
-          for (const entry of entries){
-            if (entry.isFile){
-              try { all.push(await new Promise((res,rej) => entry.file(res,rej))); } catch(err){}
-            }
-          }
-          readBatch();
-        }, () => resolve(all));
-      }
-      readBatch();
-    });
-  }
-
-  async function handleMediaDrop(dataTransfer, targetBinName){
-    const items = Array.from(dataTransfer.items || []);
-    if (!items.length) return;
-
-    mediaDropzone.classList.add('working');
-    mediaDropzone.textContent = 'Verarbeite…';
-    let created = 0;
-    try {
-      const folderJobs = []; // {name, handle?} — handle present = modern reconnectable path
-      const looseFiles = [];
-
-      for (const item of items){
-        if (item.kind !== 'file') continue;
-        if (item.getAsFileSystemHandle){
-          let handle;
-          try { handle = await item.getAsFileSystemHandle(); } catch(err){ continue; }
-          if (!handle) continue;
-          if (handle.kind === 'directory') folderJobs.push({ name: handle.name, handle });
-          else { try { looseFiles.push(await handle.getFile()); } catch(err){} }
-        } else if (item.webkitGetAsEntry){
-          const entry = item.webkitGetAsEntry();
-          if (!entry) continue;
-          if (entry.isDirectory){
-            const files = await readEntryFilesLegacy(entry);
-            if (files.length) folderJobs.push({ name: entry.name, legacyFiles: files });
-          } else {
-            try { looseFiles.push(await new Promise((res,rej) => entry.file(res,rej))); } catch(err){}
-          }
-        }
-      }
-
-      for (const job of folderJobs){
-        setBackupStatus('Lege Projekt „' + job.name + '“ an…');
-        if (job.handle){
-          const found = await scanImagesInDirectory(job.handle, 2);
-          if (!found.length) continue;
-          const dirId = registerDirHandle(job.handle, job.handle.name);
-          const tileItems = [];
-          for (const f of found){
-            try { tileItems.push({ file: await f.fileHandle.getFile(), handle: f.fileHandle, dirId, relPath: f.name }); }
-            catch(err){}
-          }
-          if (!tileItems.length) continue;
-          const savedId = await saveProjectFromItems(job.name, targetBinName, tileItems, [{ id: dirId, handle: job.handle, name: job.handle.name }]);
-          if (savedId) created++;
-        } else if (job.legacyFiles){
-          const tileItems = job.legacyFiles.filter(f => f.type.startsWith('image/')).map(f => ({ file: f, handle: null, dirId: null, relPath: null }));
-          if (!tileItems.length) continue;
-          const savedId = await saveProjectFromItems(job.name, targetBinName, tileItems, []);
-          if (savedId) created++;
-        }
-      }
-
-      const imgLoose = looseFiles.filter(f => f.type.startsWith('image/'));
-      if (imgLoose.length){
-        const name = prompt('Name für dieses Projekt (' + imgLoose.length + ' Foto(s) ohne eigenen Ordner):', defaultProjectName());
-        if (name && name.trim()){
-          const tileItems = imgLoose.map(f => ({ file: f, handle: null, dirId: null, relPath: null }));
-          const savedId = await saveProjectFromItems(name.trim(), targetBinName, tileItems, []);
-          if (savedId) created++;
-        }
-      }
-
-      if (targetBinName && created) await ensureBinExists(targetBinName);
-      setBackupStatus(created ? ('✓ ' + created + ' Projekt(e) angelegt.') : 'Keine Bilder gefunden.');
-      setTimeout(() => setBackupStatus(''), 4000);
-      openLoadModal();
-    } catch(err){
-      console.error(err);
-      alert('Hinzufügen fehlgeschlagen: ' + err.message);
-    } finally {
-      mediaDropzone.classList.remove('working');
-      mediaDropzone.textContent = 'Ordner mit Fotos hierher ziehen, um sie als neues Projekt hinzuzufügen';
-    }
-  }
-
-
-  // ---------- Backup (export all projects to a file) / Restore ----------
-  // Both directions stream photo-by-photo instead of holding everything in
-  // memory at once — a backup can be well over 1 GB, and loading that whole
-  // thing as one JS string/JSON tree is exactly what crashes the tab.
-  const backupStatus = document.getElementById('backupStatus');
-  function setBackupStatus(text){
-    backupStatus.style.display = text ? 'block' : 'none';
-    backupStatus.textContent = text || '';
-  }
-
-  // request persistent storage so Chrome doesn't evict this origin's IndexedDB under disk pressure
-  if (navigator.storage && navigator.storage.persist){
-    navigator.storage.persist().catch(() => {});
-  }
-
-  function blobToBase64(blob){
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.slice(reader.result.indexOf(',') + 1));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function base64ToBlob(base64, mime){
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: mime });
-  }
-
-  function tick(){ return new Promise(r => setTimeout(r, 0)); }
-
-  async function exportAllProjectsBackup(){
-    const db = await openDB();
-    const tx = db.transaction('projects', 'readonly');
-    const records = await new Promise((resolve, reject) => {
-      const req = tx.objectStore('projects').getAll();
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    db.close();
-    if (!records.length){ alert('Noch keine gespeicherten Collagen zum Sichern.'); return; }
-
-    const stamp = new Date().toISOString().slice(0,10);
-    const suggestedName = 'joiner-backup-' + stamp + '.json';
-
-    if (!window.showSaveFilePicker){
-      alert('Dein Browser unterstützt kein direktes Schreiben auf die Festplatte (showSaveFilePicker fehlt). Bitte in aktuellem Chrome versuchen — in Safari/Firefox funktioniert das Backup bei großen Projekten evtl. nicht zuverlässig.');
-      return;
-    }
-    let fileHandle;
-    try {
-      fileHandle = await window.showSaveFilePicker({
-        suggestedName, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-      });
-    } catch(err){ return; } // cancelled
-
-    const writable = await fileHandle.createWritable();
-    let skipped = 0;
-    try {
-      await writable.write('{"app":"joiner","version":1,"exportedAt":' + Date.now() + ',"projects":[');
-      for (let pi = 0; pi < records.length; pi++){
-        const p = records[pi];
-        if (pi > 0) await writable.write(',');
-        await writable.write('{"name":' + JSON.stringify(p.name) + ',"savedAt":' + (p.savedAt||0) + ',"color":' + JSON.stringify(p.color||null) + ',"tiles":[');
-        const tiles = p.tiles || [];
-
-        // one permission check per directory this project uses (not per photo)
-        const dirGrant = new Map();
-        for (const d of (p.dirHandles || [])){
-          try {
-            let perm = await d.handle.queryPermission({ mode: 'read' });
-            if (perm !== 'granted') perm = await d.handle.requestPermission({ mode: 'read' });
-            dirGrant.set(d.id, perm === 'granted' ? d.handle : null);
-          } catch(err){ dirGrant.set(d.id, null); }
-        }
-
-        let written = 0;
-        for (let ti = 0; ti < tiles.length; ti++){
-          const t = tiles[ti];
-          let blob = t.blob || null; // old-style saves already carry the actual photo
-          if (!blob && t.dirId != null && dirGrant.get(t.dirId) && t.relPath){
-            try { blob = (await resolveFileInDir(dirGrant.get(t.dirId), t.relPath)).file; }
-            catch(err){ /* handled below as skipped */ }
-          } else if (!blob && t.handle){
-            try {
-              let perm = await t.handle.queryPermission({ mode: 'read' });
-              if (perm !== 'granted') perm = await t.handle.requestPermission({ mode: 'read' });
-              if (perm === 'granted') blob = await t.handle.getFile();
-            } catch(err){ /* handled below as skipped */ }
-          }
-          if (!blob){
-            skipped++;
-            setBackupStatus('⚠ „' + (t.filename||t.id) + '“ nicht verknüpft — im Backup übersprungen');
-            await tick();
-            continue;
-          }
-          if (written > 0) await writable.write(',');
-          const mime = blob.type || 'image/jpeg';
-          const filename = t.filename || blob.name || null;
-          const meta = { id:t.id, x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
-                         naturalW:t.naturalW, naturalH:t.naturalH, filename, mime };
-          let base64 = '';
-          try { base64 = await blobToBase64(blob); }
-          catch(err){ skipped++; }
-          const metaStr = JSON.stringify(meta);
-          await writable.write(metaStr.slice(0, -1) + ',"data":"data:' + mime + ';base64,' + base64 + '"}');
-          written++;
-          setBackupStatus('Sichere „' + p.name + '“ — Foto ' + (ti+1) + '/' + tiles.length + ' (Projekt ' + (pi+1) + '/' + records.length + ')');
-          await tick();
-        }
-        await writable.write(']}');
-      }
-      await writable.write(']}');
-      await writable.close();
-      setBackupStatus('✓ Backup gespeichert.' + (skipped ? ' (' + skipped + ' Foto(s) übersprungen)' : ''));
-    } catch(err){
-      console.error(err);
-      try { await writable.close(); } catch(e2){}
-      setBackupStatus('');
-      throw err;
-    }
-  }
-
-  // ---------- streaming parser for the backup format above ----------
-  // Exploits the fixed key order we write with, so instead of a general JSON
-  // streaming parser we can match each object's header with a regex and then
-  // find the base64 payload's end via a plain substring search for `"}` —
-  // base64 never contains a quote or brace, so that's always safe.
-  const PROJECT_HEADER_RE = /^\{"name":((?:"(?:[^"\\]|\\.)*")|null),"savedAt":(-?\d+(?:\.\d+)?),"color":((?:"(?:[^"\\]|\\.)*")|null),"tiles":\[/;
-  const TILE_HEADER_RE = /^\{"id":"((?:[^"\\]|\\.)*)","x":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"y":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"w":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"h":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"rot":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"z":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalW":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalH":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"filename":((?:"(?:[^"\\]|\\.)*")|null),"mime":"((?:[^"\\]|\\.)*)","data":"data:([^;]*);base64,/;
-
-  async function* parseBackupStream(file){
-    const reader = file.stream().getReader();
-    const decoder = new TextDecoder();
-    let buf = '', eof = false;
-    async function more(){
-      if (eof) return false;
-      const { value, done } = await reader.read();
-      if (done){ eof = true; return false; }
-      buf += decoder.decode(value, { stream: true });
-      return true;
-    }
-    function consume(n){ buf = buf.slice(n); }
-
-    while (buf.indexOf('"projects":[') === -1){
-      if (!(await more())) throw new Error('Kein "projects"-Array gefunden — Datei beschädigt oder falsches Format.');
-    }
-    consume(buf.indexOf('"projects":[') + '"projects":['.length);
-
-    while (true){
-      while (true){
-        while (buf.length && /[\s,]/.test(buf[0])) consume(1);
-        if (buf.length) break;
-        if (!(await more())) break;
-      }
-      if (buf[0] === ']'){ consume(1); break; }
-
-      let headerMatch;
-      while (!(headerMatch = buf.match(PROJECT_HEADER_RE))){
-        if (!(await more())) throw new Error('Projekt-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
-      }
-      const name = JSON.parse(headerMatch[1]);
-      const savedAt = Number(headerMatch[2]);
-      const color = JSON.parse(headerMatch[3]);
-      consume(headerMatch[0].length);
-      yield { type: 'project-start', name, savedAt, color };
-
-      while (true){
-        while (true){
-          while (buf.length && /[\s,]/.test(buf[0])) consume(1);
-          if (buf.length) break;
-          if (!(await more())) break;
-        }
-        if (buf[0] === ']'){ consume(1); break; }
-
-        let tileMatch;
-        while (!(tileMatch = buf.match(TILE_HEADER_RE))){
-          if (!(await more())) throw new Error('Foto-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
-        }
-        const [full, id, x, y, w, h, rot, z, naturalW, naturalH, filenameRaw, mime, dataMime] = tileMatch;
-        consume(full.length);
-
-        let closeIdx;
-        while ((closeIdx = buf.indexOf('"}')) === -1){
-          if (!(await more())) throw new Error('Foto-Daten unvollständig (Datei endet unerwartet).');
-        }
-        const base64 = buf.slice(0, closeIdx);
-        consume(closeIdx + 2);
-
-        yield {
-          type: 'tile',
-          meta: { id, x:Number(x), y:Number(y), w:Number(w), h:Number(h), rot:Number(rot), z:Number(z),
-                  naturalW:Number(naturalW), naturalH:Number(naturalH),
-                  filename: JSON.parse(filenameRaw), mime: dataMime || mime },
-          base64
-        };
-      }
-
-      while (buf.length === 0){ if (!(await more())) break; }
-      if (buf[0] !== '}') throw new Error('Projekt-Ende nicht gefunden — unerwartetes Format.');
-      consume(1);
-      yield { type: 'project-end' };
-    }
-  }
-
-  async function importProjectsBackup(file){
-    const db = await openDB();
-    let currentProject = null;
-    let projectCount = 0, tileCount = 0;
-    try {
-      for await (const evt of parseBackupStream(file)){
-        if (evt.type === 'project-start'){
-          currentProject = { name: evt.name, savedAt: evt.savedAt, color: evt.color, tiles: [] };
-        } else if (evt.type === 'tile'){
-          const blob = base64ToBlob(evt.base64, evt.meta.mime);
-          const namedFile = new File([blob], evt.meta.filename || (evt.meta.id + '.jpg'), { type: evt.meta.mime });
-          currentProject.tiles.push({ id: evt.meta.id, blob: namedFile, filename: namedFile.name,
-                                       x: evt.meta.x, y: evt.meta.y, w: evt.meta.w, h: evt.meta.h,
-                                       rot: evt.meta.rot, z: evt.meta.z,
-                                       naturalW: evt.meta.naturalW, naturalH: evt.meta.naturalH });
-          tileCount++;
-          setBackupStatus('Stelle wieder her: „' + currentProject.name + '“ — Foto ' + currentProject.tiles.length + ' (insgesamt ' + tileCount + ')');
-          await tick();
-        } else if (evt.type === 'project-end'){
-          const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-          const tx = db.transaction('projects', 'readwrite');
-          tx.objectStore('projects').put({ id, name: currentProject.name, savedAt: currentProject.savedAt || Date.now(),
-                                            color: currentProject.color, tiles: currentProject.tiles });
-          await txDone(tx);
-          projectCount++;
-          currentProject = null;
-        }
-      }
-    } finally {
-      db.close();
-    }
-    if (!projectCount) throw new Error('Datei enthält keine erkennbaren Joiner-Projekte.');
-    return { projectCount, tileCount };
-  }
-
-  document.getElementById('backupBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('backupBtn');
-    btn.disabled = true;
-    try { await exportAllProjectsBackup(); }
-    catch(err){ console.error(err); alert('Backup fehlgeschlagen: ' + err.message); }
-    finally { btn.disabled = false; setTimeout(() => setBackupStatus(''), 4000); }
-  });
-
-  const restoreInput = document.getElementById('restoreInput');
-  document.getElementById('restoreBtn').addEventListener('click', () => restoreInput.click());
-  restoreInput.addEventListener('change', async () => {
-    const file = restoreInput.files && restoreInput.files[0];
-    restoreInput.value = '';
-    if (!file) return;
-    if (!confirm('Backup-Datei "' + file.name + '" importieren? Die enthaltenen Collagen werden als zusätzliche gespeicherte Projekte hinzugefügt (nichts wird überschrieben).')) return;
-    const btn = document.getElementById('restoreBtn');
-    btn.disabled = true;
-    try {
-      const result = await importProjectsBackup(file);
-      setBackupStatus('✓ Wiederhergestellt: ' + result.projectCount + ' Projekt(e), ' + result.tileCount + ' Foto(s).');
-      openLoadModal();
-    } catch(err){
-      console.error(err);
-      alert('Wiederherstellen fehlgeschlagen: ' + err.message);
-      setBackupStatus('');
-    } finally {
-      btn.disabled = false;
-    }
+    e.returnValue = '';
   });
 
   window.addEventListener('resize', () => updateBoardScale());
-
-  if ('serviceWorker' in navigator){
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
-  }
 
   render();
 })();
