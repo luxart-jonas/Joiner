@@ -117,10 +117,21 @@
     position:absolute;border:1px dashed rgba(212,175,55,.4);border-radius:6px;
     background:rgba(212,175,55,.04);pointer-events:none;
   }
-  .material-zone-label{
-    position:absolute;top:6px;left:6px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;
-    color:rgba(212,175,55,.55);pointer-events:none;font-family:'Inter',sans-serif;
+  .material-zone-header{
+    position:absolute;top:0;left:0;display:flex;align-items:center;justify-content:space-between;
+    gap:10px;padding:0 10px;box-sizing:border-box;
   }
+  .material-zone-label{
+    font-size:15px;font-weight:600;letter-spacing:.2px;color:var(--gold-soft);
+    font-family:'Inter',sans-serif;white-space:nowrap;pointer-events:none;
+  }
+  .material-zone-nav-btn{
+    width:44px;height:44px;border-radius:50%;border:2px solid var(--gold);
+    background:var(--gold);color:#1a1608;font-size:18px;font-weight:700;cursor:pointer;
+    flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.4);
+  }
+  .material-zone-nav-btn:hover:not(:disabled){background:var(--gold-soft);border-color:var(--gold-soft);}
+  .material-zone-nav-btn:disabled{opacity:.3;cursor:default;background:var(--panel-2);border-color:var(--border);color:var(--text-dim);}
   .color-swatch{
     width:34px;height:34px;border-radius:6px;border:1px solid var(--border);
     cursor:pointer;display:block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
@@ -372,8 +383,10 @@
   // refills automatically from whatever's still waiting.
   const MATERIAL_COLS = 2, MATERIAL_ROWS = 4, MATERIAL_PAGE_SIZE = MATERIAL_COLS * MATERIAL_ROWS;
   const MATERIAL_SLOT = 280, MATERIAL_GAP = 16;
+  const MATERIAL_HEADER_H = 56; // room for the big ◀ ▶ paging bar above the photo grid
   const MATERIAL_ZONE_W = MATERIAL_COLS * MATERIAL_SLOT + (MATERIAL_COLS + 1) * MATERIAL_GAP;
-  const MATERIAL_ZONE_H = MATERIAL_ROWS * MATERIAL_SLOT + (MATERIAL_ROWS + 1) * MATERIAL_GAP;
+  const MATERIAL_GRID_H = MATERIAL_ROWS * MATERIAL_SLOT + (MATERIAL_ROWS + 1) * MATERIAL_GAP;
+  const MATERIAL_ZONE_H = MATERIAL_HEADER_H + MATERIAL_GRID_H;
   let materialPage = 0;
   let materialVisibleIds = new Set();
 
@@ -582,7 +595,7 @@
     page.forEach((t, i) => {
       const col = i % MATERIAL_COLS, row = Math.floor(i / MATERIAL_COLS);
       t.x = MATERIAL_GAP + col * (MATERIAL_SLOT + MATERIAL_GAP);
-      t.y = MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
+      t.y = MATERIAL_HEADER_H + MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
       t.w = MATERIAL_SLOT; t.h = MATERIAL_SLOT; t.rot = 0;
       visible.add(t.id);
     });
@@ -774,23 +787,50 @@
 
 
   function render(){
-    const { visible: materialVisible } = layoutMaterialZone();
+    const { visible: materialVisible, total: materialTotal, maxPage: materialMaxPage } = layoutMaterialZone();
     updateMaterialNav();
 
     emptyHint.style.display = state.tiles.length ? 'none' : 'block';
     board.querySelectorAll('.tile').forEach(el => el.remove());
-    board.querySelectorAll('.material-zone-bg, .material-zone-label').forEach(el => el.remove());
+    board.querySelectorAll('.material-zone-bg, .material-zone-header').forEach(el => el.remove());
 
-    if (materialTiles().length){
+    if (materialTotal){
       const bg = document.createElement('div');
       bg.className = 'material-zone-bg';
       bg.style.left = '0px'; bg.style.top = '0px';
       bg.style.width = MATERIAL_ZONE_W + 'px'; bg.style.height = MATERIAL_ZONE_H + 'px';
       board.appendChild(bg);
-      const lbl = document.createElement('div');
-      lbl.className = 'material-zone-label';
-      lbl.textContent = 'Material';
-      board.appendChild(lbl);
+
+      const header = document.createElement('div');
+      header.className = 'material-zone-header';
+      header.style.width = MATERIAL_ZONE_W + 'px'; header.style.height = MATERIAL_HEADER_H + 'px';
+
+      const prev = document.createElement('button');
+      prev.className = 'material-zone-nav-btn';
+      prev.textContent = '◀';
+      prev.disabled = materialPage <= 0;
+      prev.title = 'Vorherige 8 (Bild↑)';
+      prev.addEventListener('pointerdown', e => e.stopPropagation());
+      prev.addEventListener('click', e => { e.stopPropagation(); materialPrevPage(); });
+      header.appendChild(prev);
+
+      const start = materialPage * MATERIAL_PAGE_SIZE + 1;
+      const end = Math.min(materialTotal, start + MATERIAL_PAGE_SIZE - 1);
+      const label = document.createElement('div');
+      label.className = 'material-zone-label';
+      label.textContent = 'Material ' + start + '–' + end + ' / ' + materialTotal;
+      header.appendChild(label);
+
+      const next = document.createElement('button');
+      next.className = 'material-zone-nav-btn';
+      next.textContent = '▶';
+      next.disabled = materialPage >= materialMaxPage;
+      next.title = 'Nächste 8 (Bild↓)';
+      next.addEventListener('pointerdown', e => e.stopPropagation());
+      next.addEventListener('click', e => { e.stopPropagation(); materialNextPage(); });
+      header.appendChild(next);
+
+      board.appendChild(header);
     }
 
     const onlySelected = state.selectedIds.size === 1 ? [...state.selectedIds][0] : null;
