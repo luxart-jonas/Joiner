@@ -300,11 +300,11 @@
 
       <button id="loadBtn" class="btn">🗂️ Laden</button>
 
-      <button id="newCollageBtn" class="btn btn-gold-outline">+ Neue Collage</button>
+      <button id="newCollageBtn" class="btn">+ Neue Collage</button>
 
-      <button id="addPhotosBtn" class="btn btn-gold">＋ Fotos</button>
+      <button id="addPhotosBtn" class="btn">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      <button id="addFolderBtn" class="btn btn-gold-outline" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
+      <button id="addFolderBtn" class="btn" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
 
       <button id="saveBtn" class="btn">💾 Speichern</button>
@@ -317,7 +317,7 @@
       </div>
 
       <div class="export-wrap">
-        <button id="exportBtn" class="btn btn-gold-outline">Exportieren ▾</button>
+        <button id="exportBtn" class="btn">Exportieren ▾</button>
         <div class="export-panel" id="exportPanel">
           <div class="field">
             <label for="exportWidthInput">Breite (Pixel)</label>
@@ -594,9 +594,16 @@
     const visible = new Set();
     page.forEach((t, i) => {
       const col = i % MATERIAL_COLS, row = Math.floor(i / MATERIAL_COLS);
-      t.x = MATERIAL_GAP + col * (MATERIAL_SLOT + MATERIAL_GAP);
-      t.y = MATERIAL_HEADER_H + MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
-      t.w = MATERIAL_SLOT; t.h = MATERIAL_SLOT; t.rot = 0;
+      const cellX = MATERIAL_GAP + col * (MATERIAL_SLOT + MATERIAL_GAP);
+      const cellY = MATERIAL_HEADER_H + MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
+      // fit the photo's real aspect ratio inside the cell (contain) instead of cropping it to a square
+      const fit = Math.min(MATERIAL_SLOT / t.naturalW, MATERIAL_SLOT / t.naturalH);
+      const w = t.naturalW * fit, h = t.naturalH * fit;
+      t.w = w; t.h = h; t.rot = 0;
+      t.x = cellX + (MATERIAL_SLOT - w) / 2;
+      t.y = cellY + (MATERIAL_SLOT - h) / 2;
+      // box now matches the image's own aspect ratio exactly, so it shows uncropped, full-frame
+      t.imgScale = fit; t.imgOffsetX = 0; t.imgOffsetY = 0;
       visible.add(t.id);
     });
     materialVisibleIds = visible;
