@@ -217,6 +217,7 @@
 
   /* ---------- Media panel: bins + drag/drop tree ---------- */
   .modal-media{width:min(560px, 100%);}
+  .modal-new-collage-row{margin:14px 18px 0;}
   .media-dropzone{
     margin:12px 18px 0;padding:14px;border:1.5px dashed var(--border);border-radius:8px;
     text-align:center;font-size:12.5px;color:var(--text-dim);transition:border-color .15s,background .15s,color .15s;
@@ -298,9 +299,7 @@
         <button id="materialNextBtn" class="btn" title="Nächste 8 (Bild↓)">▶</button>
       </div>
 
-      <button id="loadBtn" class="btn">🗂️ Laden</button>
-
-      <button id="newCollageBtn" class="btn">+ Neue Collage</button>
+      <button id="loadBtn" class="btn">📁 Collage</button>
 
       <button id="addPhotosBtn" class="btn">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
@@ -347,13 +346,16 @@
 <div class="modal-overlay" id="loadModalOverlay">
   <div class="modal modal-media">
     <div class="modal-header">
-      <h3>Laden</h3>
+      <h3>Collage</h3>
       <div style="display:flex;align-items:center;gap:8px;">
         <button id="videoExtractBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">🎬 Aus Video</button>
         <input id="videoInput" type="file" accept="video/*" hidden>
         <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
         <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
       </div>
+    </div>
+    <div class="modal-new-collage-row">
+      <button id="newCollageBtn" class="btn btn-gold" style="width:100%;justify-content:center;">+ Neue Collage</button>
     </div>
     <div class="media-dropzone" id="mediaDropzone">Ordner mit Fotos hierher ziehen, um sie als neues Projekt hinzuzufügen</div>
     <div class="modal-body" id="projectList"></div>
@@ -2452,6 +2454,7 @@
     state.pendingFolder = ''; // no bin yet — drag it into one from the Media panel whenever you like
     updateCurrentProjectLabel();
     render();
+    closeLoadModal();
   });
 
   // ---------- Video → Standbilder ----------
