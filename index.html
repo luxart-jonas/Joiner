@@ -76,10 +76,10 @@
   }
   .empty-hint{
     position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    text-align:center;color:var(--text-dim);font-size:14px;line-height:1.7;
+    text-align:center;color:#1a1a1a;font-size:14px;line-height:1.7;
     font-family:'Inter',sans-serif;pointer-events:none;width:80%;max-width:360px;
   }
-  .empty-hint b{color:var(--gold-soft);font-weight:500;}
+  .empty-hint b{color:#000;font-weight:700;}
 
   /* ---------- Tiles ---------- */
   .tile{
@@ -210,7 +210,7 @@
   }
   .project-row:hover{background:var(--panel-2);}
   .project-info{min-width:0;}
-  .project-name{color:var(--text);font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .project-name{color:var(--text);font-size:14px;font-weight:500;white-space:normal;overflow-wrap:break-word;}
   .project-meta{color:var(--text-dim);font-size:12px;margin-top:2px;}
   .project-actions{display:flex;gap:6px;flex-shrink:0;}
   .project-actions .btn{padding:7px 11px;font-size:12.5px;}
@@ -2645,7 +2645,7 @@
           new Promise(r => setTimeout(r, 2000)) // don't hang forever on a stubborn seek
         ]);
         ctx.drawImage(video, 0, 0, vw, vh);
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 1.0));
         if (blob){
           idx++;
           const filename = baseName + '_' + String(idx).padStart(4,'0') + '.jpg';
