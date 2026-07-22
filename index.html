@@ -217,6 +217,9 @@
 
   /* ---------- Media panel: bins + drag/drop tree ---------- */
   .modal-media{width:min(560px, 100%);}
+  .modal-small{width:min(320px, 100%);}
+  .new-collage-media-body{display:flex;flex-direction:column;gap:8px;padding:16px;}
+  .new-collage-media-body .btn{padding:12px;font-size:14px;}
   .modal-new-collage-row{margin:14px 18px 0;}
   .media-dropzone{
     margin:12px 18px 0;padding:14px;border:1.5px dashed var(--border);border-radius:8px;
@@ -348,8 +351,6 @@
     <div class="modal-header">
       <h3>Collage</h3>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button id="videoExtractBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">🎬 Aus Video</button>
-        <input id="videoInput" type="file" accept="video/*" hidden>
         <button id="addBinBtn" class="btn btn-gold-outline" style="font-size:12.5px;padding:7px 11px;">+ Bin</button>
         <button id="closeLoadModal" class="modal-close" aria-label="Schließen">×</button>
       </div>
@@ -368,6 +369,20 @@
       <input id="restoreInput" type="file" accept="application/json,.json" hidden>
     </div>
     <p class="modal-empty" id="backupStatus" style="display:none;padding:0 18px 14px;text-align:left;"></p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="newCollageMediaOverlay">
+  <div class="modal modal-small">
+    <div class="modal-header">
+      <h3 id="newCollageMediaTitle">Medien hinzufügen</h3>
+      <button id="closeNewCollageMediaModal" class="modal-close" aria-label="Schließen">×</button>
+    </div>
+    <div class="modal-body new-collage-media-body">
+      <button id="ncAddPhotosBtn" class="btn btn-gold" style="width:100%;justify-content:center;">＋ Fotos</button>
+      <button id="videoExtractBtn" class="btn btn-gold-outline" style="width:100%;justify-content:center;">🎬 Aus Video</button>
+      <input id="videoInput" type="file" accept="video/*" hidden>
+    </div>
   </div>
 </div>
 
@@ -2425,6 +2440,20 @@
 
   function closeLoadModal(){ loadModalOverlay.style.display = 'none'; }
 
+  const newCollageMediaOverlay = document.getElementById('newCollageMediaOverlay');
+  const newCollageMediaTitle = document.getElementById('newCollageMediaTitle');
+  function openNewCollageMediaModal(name){
+    newCollageMediaTitle.textContent = '„' + name + '“ — Medien hinzufügen';
+    newCollageMediaOverlay.style.display = 'flex';
+  }
+  function closeNewCollageMediaModal(){ newCollageMediaOverlay.style.display = 'none'; }
+  document.getElementById('closeNewCollageMediaModal').addEventListener('click', closeNewCollageMediaModal);
+  newCollageMediaOverlay.addEventListener('pointerdown', e => { if (e.target === newCollageMediaOverlay) closeNewCollageMediaModal(); });
+  document.getElementById('ncAddPhotosBtn').addEventListener('click', () => {
+    closeNewCollageMediaModal();
+    addPhotosBtn.click();
+  });
+
   document.getElementById('newCollageBtn').addEventListener('click', async () => {
     if (state.tiles.length){
       const warn = state.currentProjectId
@@ -2455,6 +2484,7 @@
     updateCurrentProjectLabel();
     render();
     closeLoadModal();
+    openNewCollageMediaModal(finalName);
   });
 
   // ---------- Video → Standbilder ----------
