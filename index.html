@@ -380,7 +380,7 @@
     </div>
     <div class="modal-body new-collage-media-body">
       <button id="ncAddPhotosBtn" class="btn btn-gold" style="width:100%;justify-content:center;">＋ Fotos</button>
-      <button id="videoExtractBtn" class="btn btn-gold-outline" style="width:100%;justify-content:center;">🎬 Aus Video</button>
+      <button id="videoExtractBtn" class="btn btn-gold-outline" style="width:100%;justify-content:center;">🎬 Bilder aus Video generieren</button>
       <input id="videoInput" type="file" accept="video/*" hidden>
     </div>
   </div>
@@ -2476,11 +2476,15 @@
     updateModeBadge();
     setBoardColor('#121214');
 
-    state.currentProjectId = null;
-    state.currentProjectName = null;
-    state.currentProjectFolder = null;
-    state.pendingName = finalName;
-    state.pendingFolder = ''; // no bin yet — drag it into one from the Media panel whenever you like
+    // save it right away as a real (still empty) project, so it shows up in the list immediately
+    const newId = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    state.currentProjectId = newId;
+    state.currentProjectName = finalName;
+    state.currentProjectFolder = '';
+    state.pendingName = null;
+    state.pendingFolder = null;
+    await putProjectRecord(newId, finalName, '');
+
     updateCurrentProjectLabel();
     render();
     closeLoadModal();
@@ -2555,7 +2559,7 @@
   const videoExtractBtnDefaultText = videoExtractBtn.textContent;
   let pendingVideoJob = null; // {file, stepSeconds, projectName, nameGuess} — waiting for the folder-pick click
 
-  async function runVideoExtraction(file, stepSeconds, projectName, nameGuess, destDirHandle){
+  async function runVideoExtraction(file, stepSeconds, destDirHandle){
     setBackupStatus('Lese Video-Länge…');
     videoExtractBtn.disabled = true;
     try {
@@ -2583,13 +2587,13 @@
       });
       if (!tileItems.length){ alert('Es konnten keine Standbilder extrahiert werden.'); setBackupStatus(''); return; }
 
-      setBackupStatus('Lege Projekt an …');
+      setBackupStatus('Füge Standbilder zur Collage hinzu …');
       const dirId = registerDirHandle(destDirHandle, destDirHandle.name);
       const linkedTileItems = tileItems.map(t => ({ file: t.file, handle: t.handle, dirId, relPath: t.relPath }));
-      const id = await saveProjectFromItems(projectName.trim() || nameGuess, '', linkedTileItems, [{ id: dirId, handle: destDirHandle, name: destDirHandle.name }]);
-      setBackupStatus(id ? ('✓ ' + tileItems.length + ' Standbilder in „' + destDirHandle.name + '“ gespeichert und mit „' + (projectName.trim() || nameGuess) + '“ verknüpft.') : 'Fehlgeschlagen.');
+      await addFilesCommon(linkedTileItems);
+      setBackupStatus('✓ ' + tileItems.length + ' Standbilder aus „' + destDirHandle.name + '“ zur Collage hinzugefügt.');
       setTimeout(() => setBackupStatus(''), 6000);
-      openLoadModal();
+      closeNewCollageMediaModal();
     } catch(err){
       console.error(err);
       alert('Extraktion fehlgeschlagen: ' + err.message);
@@ -2616,7 +2620,7 @@
         alert('Ordner-Auswahl fehlgeschlagen: ' + (err && err.message ? err.message : err));
         return;
       }
-      await runVideoExtraction(job.file, job.stepSeconds, job.projectName, job.nameGuess, destDirHandle);
+      await runVideoExtraction(job.file, job.stepSeconds, destDirHandle);
       return;
     }
     videoInput.click();
@@ -2641,13 +2645,9 @@
     const everyN = Math.max(1, parseInt(everyStr, 10) || 12);
     const stepSeconds = everyN / fps;
 
-    const nameGuess = file.name.replace(/\.[a-z0-9]+$/i, '') + ' — Standbilder';
-    const projectName = prompt('Name für das neue Projekt mit den Standbildern:', nameGuess);
-    if (projectName === null) return;
-
-    pendingVideoJob = { file, stepSeconds, projectName, nameGuess };
+    pendingVideoJob = { file, stepSeconds };
     videoExtractBtn.textContent = '📁 Jetzt klicken: Ordner wählen';
-    alert('Fast fertig — klick jetzt direkt auf „📁 Jetzt klicken: Ordner wählen“ oben in der Leiste, um den Zielordner für die Standbilder auszuwählen.');
+    alert('Fast fertig — klick jetzt direkt auf „📁 Jetzt klicken: Ordner wählen“, um den Zielordner für die Standbilder auszuwählen.');
   });
 
   document.getElementById('addBinBtn').addEventListener('click', async () => {
