@@ -240,7 +240,7 @@
   .bin-name{font-family:'Fraunces',serif;font-weight:600;font-size:14px;color:var(--gold-soft);flex:1;min-width:0;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .bin-count{font-size:11.5px;color:var(--text-dim);}
-  .bin-del{background:none;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:4px;}
+  .bin-del, .bin-icon-btn{background:none;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:2px 6px;border-radius:4px;}
   .bin-del:hover{color:#e2a2a2;}
   .bin-children{padding-left:14px;}
   .bin[draggable="true"]{cursor:grab;}
@@ -313,7 +313,7 @@
 
       <div class="color-control" title="Hintergrundfarbe der Arbeits-/Exportfläche">
         <label class="color-swatch" id="colorSwatchLabel" for="bgColorInput"></label>
-        <input type="color" id="bgColorInput" value="#121214">
+        <input type="color" id="bgColorInput" value="#b8b8b8">
         <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
       </div>
 
@@ -697,7 +697,8 @@
   const BOARD_MARGIN = 80; // board-unit padding kept on every side of the export area
 
   // ---------- Background color (work area = export area) ----------
-  let boardColor = '#121214';
+  const DEFAULT_BOARD_COLOR = '#b8b8b8';
+  let boardColor = DEFAULT_BOARD_COLOR;
   const bgColorInput = document.getElementById('bgColorInput');
   const colorSwatchLabel = document.getElementById('colorSwatchLabel');
   const eyedropperBtn = document.getElementById('eyedropperBtn');
@@ -1934,7 +1935,7 @@
     const tx = db.transaction('projects', 'readwrite');
     const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
     tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: '#121214',
+      id, name, folder: folder || '', savedAt: Date.now(), color: DEFAULT_BOARD_COLOR,
       dirHandles: dirHandles || [], tiles
     });
     await txDone(tx);
@@ -2055,6 +2056,41 @@
     db.close();
   }
 
+  async function renameProjectById(id, newName){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
+    const record = await new Promise((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (record){ record.name = newName; store.put(record); }
+    await txDone(tx);
+    db.close();
+  }
+
+  // Lean duplicate: copies the project's metadata/tile layout under a new id, same as
+  // "Speichern" would — the photos themselves are just links (handle/filename), never
+  // copied pixels, so this stays cheap even for big collages.
+  async function duplicateProjectById(id){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readwrite');
+    const store = tx.objectStore('projects');
+    const record = await new Promise((resolve, reject) => {
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (!record){ await txDone(tx); db.close(); return null; }
+    const newId = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    store.put({ ...record, id: newId, name: record.name + ' (Kopie)', savedAt: Date.now(),
+                tiles: record.tiles.map(t => ({ ...t })) });
+    await txDone(tx);
+    db.close();
+    return newId;
+  }
+
   // ---------- Bins (Media tree) ----------
   async function listBins(){
     const db = await openDB();
@@ -2100,6 +2136,35 @@
     tx.objectStore('bins').delete(id);
     await txDone(tx);
     db.close();
+  }
+
+  // Renaming a bin also has to relink every project that was filed under the old name —
+  // bins are referenced by name, not id, so this keeps them from becoming "orphaned".
+  async function renameBin(id, oldName, newName){
+    const db = await openDB();
+    const tx = db.transaction(['bins','projects'], 'readwrite');
+    const binStore = tx.objectStore('bins');
+    const binRec = await new Promise((resolve, reject) => {
+      const req = binStore.get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (binRec){ binRec.name = newName; binStore.put(binRec); }
+    const projStore = tx.objectStore('projects');
+    const allProjects = await new Promise((resolve, reject) => {
+      const req = projStore.getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    allProjects.forEach(p => { if (p.folder === oldName){ p.folder = newName; projStore.put(p); } });
+    await txDone(tx);
+    db.close();
+  }
+
+  // Duplicates just the bin itself (an empty new folder with a similar name) — the
+  // projects inside stay where they are rather than also getting copied.
+  async function duplicateBin(name){
+    return await createBin(name);
   }
 
   async function moveBinBefore(draggedId, targetId){
@@ -2273,6 +2338,30 @@
       closeLoadModal();
     });
 
+    const renameBtnEl = document.createElement('button');
+    renameBtnEl.className = 'btn';
+    renameBtnEl.textContent = '✏️ Umbenennen';
+    renameBtnEl.addEventListener('click', async e => {
+      e.stopPropagation();
+      const newName = prompt('Neuer Name für „' + p.name + '“:', p.name);
+      if (newName === null || !newName.trim() || newName.trim() === p.name) return;
+      await renameProjectById(p.id, newName.trim());
+      if (state.currentProjectId === p.id){
+        state.currentProjectName = newName.trim();
+        updateCurrentProjectLabel();
+      }
+      openLoadModal();
+    });
+
+    const dupBtnEl = document.createElement('button');
+    dupBtnEl.className = 'btn';
+    dupBtnEl.textContent = '⧉ Duplizieren';
+    dupBtnEl.addEventListener('click', async e => {
+      e.stopPropagation();
+      await duplicateProjectById(p.id);
+      openLoadModal();
+    });
+
     const delBtnEl = document.createElement('button');
     delBtnEl.className = 'btn btn-ghost';
     delBtnEl.textContent = 'Löschen';
@@ -2289,6 +2378,8 @@
     });
 
     actions.appendChild(loadBtnEl);
+    actions.appendChild(renameBtnEl);
+    actions.appendChild(dupBtnEl);
     actions.appendChild(delBtnEl);
     row.appendChild(info);
     row.appendChild(actions);
@@ -2322,6 +2413,30 @@
     const countEl = document.createElement('span');
     countEl.className = 'bin-count';
     countEl.textContent = String(projectsInBin.length);
+    const renameBinBtn = document.createElement('button');
+    renameBinBtn.className = 'bin-icon-btn';
+    renameBinBtn.textContent = '✏️';
+    renameBinBtn.title = 'Bin umbenennen';
+    renameBinBtn.style.display = isReal ? '' : 'none';
+    renameBinBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const newName = prompt('Neuer Name für den Bin „' + bin.name + '“:', bin.name);
+      if (newName === null || !newName.trim() || newName.trim() === bin.name) return;
+      await renameBin(bin.id, bin.name, newName.trim());
+      openLoadModal();
+    });
+    const dupBinBtn = document.createElement('button');
+    dupBinBtn.className = 'bin-icon-btn';
+    dupBinBtn.textContent = '⧉';
+    dupBinBtn.title = 'Bin duplizieren (leerer neuer Bin mit ähnlichem Namen — Projekte bleiben im Original)';
+    dupBinBtn.style.display = isReal ? '' : 'none';
+    dupBinBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const newName = prompt('Name für den neuen Bin:', bin.name + ' (Kopie)');
+      if (newName === null || !newName.trim()) return;
+      await duplicateBin(newName.trim());
+      openLoadModal();
+    });
     const delBtn = document.createElement('button');
     delBtn.className = 'bin-del';
     delBtn.textContent = '×';
@@ -2333,7 +2448,8 @@
       if (isReal) await deleteBin(bin.id);
       openLoadModal();
     });
-    header.appendChild(chevron); header.appendChild(nameEl); header.appendChild(countEl); header.appendChild(delBtn);
+    header.appendChild(chevron); header.appendChild(nameEl); header.appendChild(countEl);
+    header.appendChild(renameBinBtn); header.appendChild(dupBinBtn); header.appendChild(delBtn);
     header.addEventListener('click', () => {
       if (collapsedBins.has(bin.id)) collapsedBins.delete(bin.id); else collapsedBins.add(bin.id);
       openLoadModal();
@@ -2474,7 +2590,7 @@
     blockCursor = { x:0, y:0, rowH:0 };
     materialPage = 0;
     updateModeBadge();
-    setBoardColor('#121214');
+    setBoardColor(DEFAULT_BOARD_COLOR);
 
     // save it right away as a real (still empty) project, so it shows up in the list immediately
     const newId = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
