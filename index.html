@@ -377,18 +377,18 @@
   const ROW_GAP = 10;       // gap between photos
   const BLOCK_WRAP_WIDTH = 1250; // wrap to a new row once a row reaches roughly this width — keeps photos as a block, not one long strip
 
-  // Material zone: a fixed-size 2x4 tray in the top-left corner that always shows up to 8
-  // not-yet-used photos, nice and big. Everything to the right/below stays free workspace.
+  // Material zone: a fixed-width 2-column tray in the top-left corner that always shows up to 8
+  // not-yet-used photos, nice and big, packed tightly (row height follows the actual photos —
+  // no reserved empty space around them). Everything to the right/below stays free workspace.
   // New photos land here first; dragging one out past the zone edge "uses" it and the tray
   // refills automatically from whatever's still waiting.
   const MATERIAL_COLS = 2, MATERIAL_ROWS = 4, MATERIAL_PAGE_SIZE = MATERIAL_COLS * MATERIAL_ROWS;
-  const MATERIAL_SLOT = 280, MATERIAL_GAP = 16;
+  const MATERIAL_SLOT = 320, MATERIAL_GAP = 10;
   const MATERIAL_HEADER_H = 56; // room for the big ◀ ▶ paging bar above the photo grid
   const MATERIAL_ZONE_W = MATERIAL_COLS * MATERIAL_SLOT + (MATERIAL_COLS + 1) * MATERIAL_GAP;
-  const MATERIAL_GRID_H = MATERIAL_ROWS * MATERIAL_SLOT + (MATERIAL_ROWS + 1) * MATERIAL_GAP;
-  const MATERIAL_ZONE_H = MATERIAL_HEADER_H + MATERIAL_GRID_H;
   let materialPage = 0;
   let materialVisibleIds = new Set();
+  let materialZoneH = MATERIAL_HEADER_H + MATERIAL_GAP; // recomputed each layout pass — depends on the actual photos on the current page
 
   const board = document.getElementById('board');
   const viewport = document.getElementById('viewport');
@@ -592,21 +592,28 @@
     const start = materialPage * MATERIAL_PAGE_SIZE;
     const page = all.slice(start, start + MATERIAL_PAGE_SIZE);
     const visible = new Set();
-    page.forEach((t, i) => {
-      const col = i % MATERIAL_COLS, row = Math.floor(i / MATERIAL_COLS);
-      const cellX = MATERIAL_GAP + col * (MATERIAL_SLOT + MATERIAL_GAP);
-      const cellY = MATERIAL_HEADER_H + MATERIAL_GAP + row * (MATERIAL_SLOT + MATERIAL_GAP);
-      // fit the photo's real aspect ratio inside the cell (contain) instead of cropping it to a square
-      const fit = Math.min(MATERIAL_SLOT / t.naturalW, MATERIAL_SLOT / t.naturalH);
-      const w = t.naturalW * fit, h = t.naturalH * fit;
-      t.w = w; t.h = h; t.rot = 0;
-      t.x = cellX + (MATERIAL_SLOT - w) / 2;
-      t.y = cellY + (MATERIAL_SLOT - h) / 2;
-      // box now matches the image's own aspect ratio exactly, so it shows uncropped, full-frame
-      t.imgScale = fit; t.imgOffsetX = 0; t.imgOffsetY = 0;
-      visible.add(t.id);
-    });
+
+    let y = MATERIAL_HEADER_H + MATERIAL_GAP;
+    for (let i = 0; i < page.length; i += MATERIAL_COLS){
+      const rowItems = page.slice(i, i + MATERIAL_COLS);
+      // width-fit each photo to its column, no cropping — row height follows the tallest one
+      const fitted = rowItems.map(t => {
+        const fit = MATERIAL_SLOT / t.naturalW;
+        return { t, fit, w: MATERIAL_SLOT, h: t.naturalH * fit };
+      });
+      const rowH = Math.max(...fitted.map(f => f.h));
+      fitted.forEach((f, ci) => {
+        const cellX = MATERIAL_GAP + ci * (MATERIAL_SLOT + MATERIAL_GAP);
+        f.t.w = f.w; f.t.h = f.h; f.t.rot = 0;
+        f.t.x = cellX;
+        f.t.y = y + (rowH - f.h) / 2; // centers it if the row's other photo is taller
+        f.t.imgScale = f.fit; f.t.imgOffsetX = 0; f.t.imgOffsetY = 0;
+        visible.add(f.t.id);
+      });
+      y += rowH + MATERIAL_GAP;
+    }
     materialVisibleIds = visible;
+    materialZoneH = Math.max(MATERIAL_HEADER_H + MATERIAL_GAP, y);
     return { total: all.length, maxPage, visible };
   }
   function updateMaterialNav(){
@@ -638,7 +645,7 @@
     tiles.forEach(t => {
       if (!t.isMaterial || !materialVisibleIds.has(t.id)) return; // never promote something off-page
       const cx = t.x + t.w/2, cy = t.y + t.h/2;
-      if (cx > MATERIAL_ZONE_W || cy > MATERIAL_ZONE_H){
+      if (cx > MATERIAL_ZONE_W || cy > materialZoneH){
         t.isMaterial = false;
         changed = true;
       }
@@ -728,7 +735,7 @@
   }
   function boardHeight(){
     let maxY = state.tiles.length ? 200 : 660; // bigger empty canvas so the help text fits inside it
-    if (materialTiles().length) maxY = Math.max(maxY, MATERIAL_ZONE_H);
+    if (materialTiles().length) maxY = Math.max(maxY, materialZoneH);
     state.tiles.forEach(t => {
       if (t.isMaterial && !materialVisibleIds.has(t.id)) return;
       maxY = Math.max(maxY, t.y + t.h);
@@ -810,7 +817,7 @@
       const bg = document.createElement('div');
       bg.className = 'material-zone-bg';
       bg.style.left = '0px'; bg.style.top = '0px';
-      bg.style.width = MATERIAL_ZONE_W + 'px'; bg.style.height = MATERIAL_ZONE_H + 'px';
+      bg.style.width = MATERIAL_ZONE_W + 'px'; bg.style.height = materialZoneH + 'px';
       board.appendChild(bg);
 
       const header = document.createElement('div');
