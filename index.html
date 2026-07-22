@@ -400,6 +400,11 @@
   // refills automatically from whatever's still waiting.
   const MATERIAL_COLS = 2, MATERIAL_ROWS = 4, MATERIAL_PAGE_SIZE = MATERIAL_COLS * MATERIAL_ROWS;
   const MATERIAL_SLOT = 320, MATERIAL_GAP = 10;
+  // Cap how tall a single material photo is allowed to make its row. Without this, a very
+  // tall/portrait phone photo (width-fit to the full column width) can blow a row's height
+  // up to 3-4x normal — its row partner then gets centered in that huge row, which reads as
+  // a blank gap and a "missing" tile even though nothing is actually mispositioned.
+  const MATERIAL_MAX_TILE_H = MATERIAL_SLOT * 1.35;
   const MATERIAL_HEADER_H = 56; // room for the big ◀ ▶ paging bar above the photo grid
   const MATERIAL_ZONE_W = MATERIAL_COLS * MATERIAL_SLOT + (MATERIAL_COLS + 1) * MATERIAL_GAP;
   let materialPage = 0;
@@ -612,14 +617,22 @@
     let y = MATERIAL_HEADER_H + MATERIAL_GAP;
     for (let i = 0; i < page.length; i += MATERIAL_COLS){
       const rowItems = page.slice(i, i + MATERIAL_COLS);
-      // width-fit each photo to its column, no cropping — row height follows the tallest one
+      // width-fit each photo to its column, no cropping — row height follows the tallest one,
+      // but capped at MATERIAL_MAX_TILE_H so one extreme portrait photo can't blow up the row
+      // (in that case it's width-shrunk instead, and centered in its column).
       const fitted = rowItems.map(t => {
-        const fit = MATERIAL_SLOT / t.naturalW;
-        return { t, fit, w: MATERIAL_SLOT, h: t.naturalH * fit };
+        let fit = MATERIAL_SLOT / t.naturalW;
+        let w = MATERIAL_SLOT, h = t.naturalH * fit;
+        if (h > MATERIAL_MAX_TILE_H){
+          fit = MATERIAL_MAX_TILE_H / t.naturalH;
+          h = MATERIAL_MAX_TILE_H;
+          w = t.naturalW * fit;
+        }
+        return { t, fit, w, h };
       });
       const rowH = Math.max(...fitted.map(f => f.h));
       fitted.forEach((f, ci) => {
-        const cellX = MATERIAL_GAP + ci * (MATERIAL_SLOT + MATERIAL_GAP);
+        const cellX = MATERIAL_GAP + ci * (MATERIAL_SLOT + MATERIAL_GAP) + (MATERIAL_SLOT - f.w) / 2;
         f.t.w = f.w; f.t.h = f.h; f.t.rot = 0;
         f.t.x = cellX;
         f.t.y = y + (rowH - f.h) / 2; // centers it if the row's other photo is taller
