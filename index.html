@@ -304,7 +304,6 @@
 
       <button id="addPhotosBtn" class="btn">＋ Fotos</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
-      <button id="addFolderBtn" class="btn" title="Ganzen Ordner verknüpfen — eine Erlaubnis für alle enthaltenen Fotos, statt eine pro Foto">📁 Ordner</button>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
 
       <button id="saveBtn" class="btn">💾 Speichern</button>
@@ -1142,19 +1141,33 @@
     startDragGroup(e, tile);
   }
 
+  function tileAABB(t){
+    const corners = tileCorners(t);
+    const xs = corners.map(c => c[0]), ys = corners.map(c => c[1]);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  }
+  function tilesOverlap(a, b){
+    const A = tileAABB(a), B = tileAABB(b);
+    return !(A.maxX < B.minX || B.maxX < A.minX || A.maxY < B.minY || B.maxY < A.minY);
+  }
+  function overlappingStack(tile){
+    return state.tiles
+      .filter(t => !t.isMaterial && (t.id === tile.id || tilesOverlap(t, tile)))
+      .sort((a,b) => a.z - b.z);
+  }
   function bringForwardOneStep(tile){
-    const sorted = [...state.tiles].sort((a,b) => a.z - b.z);
-    const idx = sorted.findIndex(t => t.id === tile.id);
-    if (idx === -1 || idx === sorted.length - 1) return; // already topmost
-    const next = sorted[idx + 1];
+    const stack = overlappingStack(tile);
+    const idx = stack.findIndex(t => t.id === tile.id);
+    if (idx === -1 || idx === stack.length - 1) return; // already topmost among what it overlaps
+    const next = stack[idx + 1];
     const tmp = tile.z; tile.z = next.z; next.z = tmp;
   }
 
   function bringBackwardOneStep(tile){
-    const sorted = [...state.tiles].sort((a,b) => a.z - b.z);
-    const idx = sorted.findIndex(t => t.id === tile.id);
-    if (idx <= 0) return; // already at the back
-    const prev = sorted[idx - 1];
+    const stack = overlappingStack(tile);
+    const idx = stack.findIndex(t => t.id === tile.id);
+    if (idx <= 0) return; // already at the back among what it overlaps
+    const prev = stack[idx - 1];
     const tmp = tile.z; tile.z = prev.z; prev.z = tmp;
   }
 
@@ -1664,36 +1677,6 @@
     const ids = new Set(state.tiles.map(t => t.dirId).filter(x => x != null));
     return state.dirHandles.filter(d => ids.has(d.id));
   }
-
-  const addFolderBtn = document.getElementById('addFolderBtn');
-  addFolderBtn.addEventListener('click', async () => {
-    if (!window.showDirectoryPicker){
-      alert('Ordner-Verknüpfung braucht die Dateisystem-Funktionen von aktuellem Chrome — in diesem Browser nicht verfügbar. Nutze stattdessen "＋ Fotos".');
-      return;
-    }
-    let dirHandle;
-    try { dirHandle = await window.showDirectoryPicker(); }
-    catch(err){ return; } // cancelled
-    addFolderBtn.textContent = 'Durchsuche…';
-    addFolderBtn.disabled = true;
-    try {
-      const found = await scanImagesInDirectory(dirHandle, 2);
-      if (!found.length){
-        alert('Keine Bilder in „' + dirHandle.name + '“ gefunden (durchsucht bis 2 Unterordner tief).');
-        return;
-      }
-      const dirId = registerDirHandle(dirHandle, dirHandle.name);
-      const items = [];
-      for (const f of found){
-        try { items.push({ file: await f.fileHandle.getFile(), handle: f.fileHandle, dirId, relPath: f.name }); }
-        catch(err){ console.warn(err); }
-      }
-      await addFilesCommon(items);
-    } finally {
-      addFolderBtn.textContent = '📁 Ordner';
-      addFolderBtn.disabled = false;
-    }
-  });
 
   const addPhotosBtn = document.getElementById('addPhotosBtn');
   addPhotosBtn.addEventListener('click', async () => {
