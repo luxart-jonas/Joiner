@@ -379,6 +379,7 @@
       <button id="closeNewCollageMediaModal" class="modal-close" aria-label="Schließen">×</button>
     </div>
     <div class="modal-body new-collage-media-body">
+      <p id="newCollageMediaSubtitle" style="display:none;margin:-4px 0 4px;font-size:12.5px;color:var(--text-dim);line-height:1.4;"></p>
       <button id="ncAddPhotosBtn" class="btn btn-gold" style="width:100%;justify-content:center;">＋ Fotos</button>
       <button id="videoExtractBtn" class="btn btn-gold-outline" style="width:100%;justify-content:center;">🎬 Bilder aus Video generieren</button>
       <input id="videoInput" type="file" accept="video/*" hidden>
@@ -1710,7 +1711,9 @@
   }
 
   const addPhotosBtn = document.getElementById('addPhotosBtn');
-  addPhotosBtn.addEventListener('click', async () => {
+  // The actual "pick image files from a folder" step — used both by the toolbar's ＋ Fotos
+  // flow (via the add-media modal) and by the new-collage media modal's own ＋ Fotos button.
+  async function pickPhotosDirect(){
     if (window.showOpenFilePicker){
       let handles;
       try {
@@ -1723,6 +1726,12 @@
     } else {
       fileInput.click();
     }
+  }
+  // Toolbar ＋ Fotos: opens the add-media modal (files, or "🎬 Bilder aus Video generieren")
+  // instead of jumping straight to the file picker, so a video can be turned into stills and
+  // added to the collage that's currently open — not just right after creating a new one.
+  addPhotosBtn.addEventListener('click', () => {
+    openAddMediaModal();
   });
 
   fileInput.addEventListener('change', e => {
@@ -2571,16 +2580,39 @@
 
   const newCollageMediaOverlay = document.getElementById('newCollageMediaOverlay');
   const newCollageMediaTitle = document.getElementById('newCollageMediaTitle');
-  function openNewCollageMediaModal(name){
-    newCollageMediaTitle.textContent = '„' + name + '“ — Medien hinzufügen';
+  const newCollageMediaSubtitle = document.getElementById('newCollageMediaSubtitle');
+  // Shared "add media" modal — used both right after creating a brand-new (still empty)
+  // collage, and for adding more photos/video-stills to whichever collage is currently open.
+  function openMediaModal(title, subtitle){
+    newCollageMediaTitle.textContent = title;
+    if (subtitle){ newCollageMediaSubtitle.textContent = subtitle; newCollageMediaSubtitle.style.display = 'block'; }
+    else { newCollageMediaSubtitle.textContent = ''; newCollageMediaSubtitle.style.display = 'none'; }
     newCollageMediaOverlay.style.display = 'flex';
   }
-  function closeNewCollageMediaModal(){ newCollageMediaOverlay.style.display = 'none'; }
+  function openNewCollageMediaModal(name){
+    openMediaModal('„' + name + '“ — Medien hinzufügen', 'Womit soll „' + name + '“ starten?');
+  }
+  // Opened from the toolbar "＋ Fotos" button while a project (saved or not yet saved) is open —
+  // makes clear that anything picked here lands in the collage that's currently on screen,
+  // and additionally offers generating stills from a video (previously only available
+  // right after creating a brand-new collage).
+  function openAddMediaModal(){
+    const subtitle = state.currentProjectName
+      ? 'Hier werden dem laufenden Projekt „' + state.currentProjectName + '“ neue Bilder hinzugefügt.'
+      : 'Hier werden dem aktuell offenen Projekt neue Bilder hinzugefügt.';
+    openMediaModal('Medien hinzufügen', subtitle);
+  }
+  function closeNewCollageMediaModal(){
+    newCollageMediaOverlay.style.display = 'none';
+    // safety net: if the video flow was left hanging mid-way (folder pick not yet done),
+    // don't let a stale pending job silently resume next time this modal opens
+    if (pendingVideoJob){ pendingVideoJob = null; videoExtractBtn.textContent = videoExtractBtnDefaultText; }
+  }
   document.getElementById('closeNewCollageMediaModal').addEventListener('click', closeNewCollageMediaModal);
   newCollageMediaOverlay.addEventListener('pointerdown', e => { if (e.target === newCollageMediaOverlay) closeNewCollageMediaModal(); });
   document.getElementById('ncAddPhotosBtn').addEventListener('click', () => {
     closeNewCollageMediaModal();
-    addPhotosBtn.click();
+    pickPhotosDirect();
   });
 
   document.getElementById('newCollageBtn').addEventListener('click', async () => {
