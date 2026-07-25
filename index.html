@@ -2271,20 +2271,31 @@
   // ctx is already translated/rotated to the tile's own top-left origin and clipped to any cuts.
   function drawTextTileToCanvas(ctx, tile, RES){
     ensureCropDefaults(tile);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, tile.w * RES, tile.h * RES); // crop window, same box the live tile clips to
-    ctx.clip();
+
+    // Text is first rendered onto a small OFFSCREEN canvas at near-origin coordinates (no
+    // rotation, no large absolute translate), then composited onto the real export canvas via
+    // drawImage. This works around a Chromium/Skia rendering bug where ctx.fillText() under a
+    // ctx.rotate() transform, positioned far from a large canvas's origin (as happens routinely
+    // here once RES/scale push tiles thousands of pixels from 0,0), draws the text with a
+    // visibly curved/arced baseline instead of a straight one. Compositing a plain bitmap via
+    // drawImage is not affected by that bug, so the rotation is applied to the bitmap instead of
+    // to live glyph rasterization.
+    const cw = Math.max(1, Math.round(tile.w * RES));
+    const ch = Math.max(1, Math.round(tile.h * RES));
+    const off = document.createElement('canvas');
+    off.width = cw;
+    off.height = ch;
+    const octx = off.getContext('2d');
 
     const fontSizePx = tile.fontSize * tile.imgScale * RES;
     const weight = tile.bold ? '700' : '500';
     const style = tile.italic ? 'italic' : 'normal';
-    ctx.font = style + ' ' + weight + ' ' + fontSizePx + 'px ' + tile.fontFamily;
-    ctx.fillStyle = tile.color;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
+    octx.font = style + ' ' + weight + ' ' + fontSizePx + 'px ' + tile.fontFamily;
+    octx.fillStyle = tile.color;
+    octx.textBaseline = 'top';
+    octx.textAlign = 'left';
     const spacingPx = (tile.letterSpacing || 0) * tile.imgScale * RES;
-    if ('letterSpacing' in ctx) ctx.letterSpacing = spacingPx + 'px'; // Chrome/Firefox/Safari all support this now
+    if ('letterSpacing' in octx) octx.letterSpacing = spacingPx + 'px'; // Chrome/Firefox/Safari all support this now
 
     const lines = (tile.text || '').split('\n');
     const lineHeightPx = tile.fontSize * tile.imgScale * tile.lineHeight * RES;
@@ -2293,12 +2304,18 @@
     const originY = tile.imgOffsetY * RES;
 
     lines.forEach((line, i) => {
-      const lineW = ctx.measureText(line).width;
+      const lineW = octx.measureText(line).width;
       let drawX = originX;
       if (tile.textAlign === 'center') drawX = originX + (boxW - lineW) / 2;
       else if (tile.textAlign === 'right') drawX = originX + (boxW - lineW);
-      ctx.fillText(line, drawX, originY + i * lineHeightPx);
+      octx.fillText(line, drawX, originY + i * lineHeightPx);
     });
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, tile.w * RES, tile.h * RES); // crop window, same box the live tile clips to
+    ctx.clip();
+    ctx.drawImage(off, 0, 0, cw, ch, 0, 0, tile.w * RES, tile.h * RES);
     ctx.restore();
   }
 
