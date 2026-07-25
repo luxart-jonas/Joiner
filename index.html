@@ -83,11 +83,20 @@
 
   /* ---------- Tiles ---------- */
   .tile{
-    position:absolute;box-sizing:border-box;overflow:hidden;
+    position:absolute;box-sizing:border-box;
     box-shadow:0 4px 14px rgba(0,0,0,.5);
     cursor:grab;touch-action:none;user-select:none;
   }
   .tile:active{cursor:grabbing;}
+  /* Clips only the tile's own content (image/text/cut-layers) — handles (delete, rotate,
+     resize, crop) live as unclipped children of .tile itself so they stay fully visible and
+     clickable even though several of them are deliberately positioned partly or fully outside
+     the tile's own box (e.g. the rotate handle sits above the tile at top:-38px). */
+  /* pointer-events:none so this wrapper never becomes the hit-test target itself — clicks
+     pass straight through to .tile (matching the pre-existing hit-testing behavior, where
+     content sat directly inside .tile) except where a child explicitly opts back in below. */
+  .tile-clip{position:absolute;inset:0;overflow:hidden;pointer-events:none;}
+  .tile-clip .text-content{pointer-events:auto;}
   .tile img{position:absolute;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
   .tile .text-content{
     position:absolute;box-sizing:border-box;margin:0;white-space:pre;
@@ -476,6 +485,7 @@
   let cutPoints = [];    // 0-3 points of the cut currently being placed (not yet committed)
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
   let editingTileId = null; // id of the text tile currently being typed into (contenteditable), or null
+  let lastTileClickId = null; let lastTileClickTime = 0; // manual double-click tracking (see onTilePointerDown)
   const modeBadge = document.getElementById('modeBadge');
   const materialNav = document.getElementById('materialNav');
   const materialNavLabel = document.getElementById('materialNavLabel');
@@ -1085,7 +1095,10 @@
       el.style.zIndex = tile.z;
       el.dataset.id = tile.id;
 
-      let mountPoint = el;
+      const tileClip = document.createElement('div');
+      tileClip.className = 'tile-clip';
+      el.appendChild(tileClip);
+      let mountPoint = tileClip;
       let contentEl;
 
       if (tile.type === 'text'){
@@ -1367,6 +1380,24 @@
       return;
     }
 
+    // Manual double-click detection for re-entering text-edit mode. render() rebuilds this
+    // tile's DOM element on every single pointerdown (to show/hide selection handles), which
+    // destroys the element the browser would otherwise track between the two clicks of a
+    // dblclick — so the native 'dblclick' event never fires once a text tile has been through
+    // even one render() pass (e.g. after being moved once). We track click timing ourselves.
+    const isHandleTarget = cls.contains('delete-handle') || cls.contains('resize-handle') ||
+                            cls.contains('rotate-handle') || cls.contains('crop-handle');
+    const clickNow = Date.now();
+    const isDoubleClick = lastTileClickId === tile.id && (clickNow - lastTileClickTime) < 400;
+    lastTileClickId = tile.id;
+    lastTileClickTime = clickNow;
+    if (isDoubleClick && tile.type === 'text' && !isHandleTarget){
+      lastTileClickId = null; lastTileClickTime = 0;
+      state.selectedIds = new Set([tile.id]);
+      enterTextEditMode(tile.id);
+      return;
+    }
+
     // Plain click: if this tile is already part of an active multi-selection, keep the
     // whole group selected (so dragging moves everything together). Otherwise select just this tile.
     const partOfGroup = state.selectedIds.has(tile.id) && state.selectedIds.size > 1;
@@ -1399,12 +1430,40 @@
       .filter(t => !t.isMaterial && (t.id === tile.id || tilesOverlap(t, tile)))
       .sort((a,b) => a.z - b.z);
   }
+  // Re-numbers every non-material tile's z to a clean 1..N sequence, in whatever relative
+  // order their (possibly fractional, post-insertion) z values currently imply. Never
+  // changes anyone's RELATIVE order — it only tidies the numbers back to plain integers
+  // (CSS z-index requires integers) after moveTileAdjacentTo() below inserts a tile at a
+  // fractional position between two neighbors.
+  function normalizeZOrder(){
+    const order = state.tiles.filter(t => !t.isMaterial).sort((a,b) => a.z - b.z);
+    order.forEach((t, i) => { t.z = i + 1; });
+    maxZ = order.length;
+  }
+  // Moves ONLY `tile` to sit directly above/below `neighbor` in the GLOBAL stacking order
+  // (i.e. relative to every tile on the board, not just the ones `tile` happens to overlap).
+  // Crucially this never writes to `neighbor`'s z or any other tile's z — a naive raw-value
+  // swap with the neighbor can leapfrog a third, unrelated tile whose z sits between the two
+  // swapped values, silently reordering tiles the user never touched. Inserting `tile` at a
+  // fractional z strictly between neighbor and its own global neighbor avoids that entirely.
+  function moveTileAdjacentTo(tile, neighbor, side){
+    const order = state.tiles.filter(t => !t.isMaterial && t.id !== tile.id).sort((a,b) => a.z - b.z);
+    const nIdx = order.findIndex(t => t.id === neighbor.id);
+    if (side === 'above'){
+      const upper = order[nIdx + 1];
+      tile.z = upper ? (neighbor.z + upper.z) / 2 : neighbor.z + 1;
+    } else {
+      const lower = order[nIdx - 1];
+      tile.z = lower ? (lower.z + neighbor.z) / 2 : neighbor.z - 1;
+    }
+    normalizeZOrder();
+  }
   function bringForwardOneStep(tile){
     const stack = overlappingStack(tile);
     const idx = stack.findIndex(t => t.id === tile.id);
     if (idx === -1 || idx === stack.length - 1) return; // already topmost among what it overlaps
     const next = stack[idx + 1];
-    const tmp = tile.z; tile.z = next.z; next.z = tmp;
+    moveTileAdjacentTo(tile, next, 'above');
   }
 
   function bringBackwardOneStep(tile){
@@ -1412,7 +1471,7 @@
     const idx = stack.findIndex(t => t.id === tile.id);
     if (idx <= 0) return; // already at the back among what it overlaps
     const prev = stack[idx - 1];
-    const tmp = tile.z; tile.z = prev.z; prev.z = tmp;
+    moveTileAdjacentTo(tile, prev, 'below');
   }
 
   function groupBounds(tiles){
@@ -1428,6 +1487,12 @@
     // Typing into a text tile's contenteditable — its own keydown listener already stops
     // propagation, but bail out here too as a safety net (e.g. focus ending up elsewhere).
     if (editingTileId) return;
+    // Any keyboard shortcut (H/V/R/S/Delete/...) between two clicks clearly means the user
+    // is doing two separate, deliberate actions — not double-clicking to edit. Without this,
+    // click tile -> press a shortcut -> click the same tile again shortly after (a common,
+    // ordinary workflow) could be misread as a double-click and unexpectedly jump into text
+    // edit mode, since the manual double-click tracking below only looks at elapsed time.
+    lastTileClickId = null; lastTileClickTime = 0;
     // While placing/adjusting a cut, Escape cancels it and Delete/Backspace steps back
     // (removes the last placed point, or the last already-committed cut if none pending)
     if (dragMode === 'cut'){
