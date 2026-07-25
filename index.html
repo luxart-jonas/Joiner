@@ -2311,12 +2311,11 @@
       octx.fillText(line, drawX, originY + i * lineHeightPx);
     });
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, tile.w * RES, tile.h * RES); // crop window, same box the live tile clips to
-    ctx.clip();
+    // No extra clip needed here: the offscreen canvas is already exactly the tile's own box
+    // size (cw x ch), so anything drawn outside it was never rasterized in the first place —
+    // and leaving the main canvas unclipped lets the tile's drop shadow (set by the caller)
+    // render normally instead of being cut off at the box edge.
     ctx.drawImage(off, 0, 0, cw, ch, 0, 0, tile.w * RES, tile.h * RES);
-    ctx.restore();
   }
 
   exportBtn.addEventListener('click', e => {
@@ -2373,14 +2372,17 @@
           tile.cuts.forEach(cut => applyCanvasCutClip(ctx, cut, tile.w, tile.h, RES));
         }
 
+        // Matches the live editor's `.tile{box-shadow:0 4px 14px rgba(0,0,0,.5)}` — applied to
+        // every tile type (previously photo-only), so text tiles get the same drop shadow in
+        // the export that they show while editing instead of appearing to float flat.
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 10 * RES;
+        ctx.shadowOffsetY = 3 * RES;
+
         if (tile.type === 'text'){
           drawTextTileToCanvas(ctx, tile, RES);
         } else {
           const img = results[i].value;
-          ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.shadowBlur = 10 * RES;
-          ctx.shadowOffsetY = 3 * RES;
-
           const iw = tile.w * RES, ih = tile.h * RES;
           ensureCropDefaults(tile);
           // read exactly the source rectangle that's visible on screen for this tile's
