@@ -128,12 +128,13 @@
 
   .color-control{display:flex;align-items:center;gap:6px;}
   .text-toolbar{display:none;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:var(--panel-2);flex-wrap:wrap;}
-  .text-toolbar select, .text-toolbar input[type=number]{
+  .text-toolbar select, .text-toolbar input[type=number], .text-toolbar input[type=text]{
     appearance:none;background:var(--panel);border:1px solid var(--border);border-radius:5px;
     color:var(--text);font-family:'Inter',sans-serif;font-size:12.5px;padding:7px 8px;
   }
   .text-toolbar input[type=number]{width:56px;}
   .text-toolbar select{max-width:132px;}
+  .text-toolbar input[type=text]#textFontFamily{width:150px;}
   .text-toolbar input[type=color]{
     width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:5px;
     background:none;cursor:pointer;flex-shrink:0;
@@ -173,6 +174,27 @@
   }
   #eyedropperBtn{padding:9px 11px;font-size:15px;}
   .current-project-label{font-size:11.5px;color:var(--text-dim);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
+
+  /* ---------- Favorite fonts popover ---------- */
+  .fav-fonts-wrap{position:relative;display:inline-flex;}
+  #favFontStarBtn.active{background:var(--gold);border-color:var(--gold);color:#1a1608;}
+  .fav-fonts-panel{
+    display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:200;
+    width:220px;max-height:280px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:10px;
+  }
+  .fav-fonts-panel.open{display:block;}
+  .fav-fonts-empty{font-size:12px;color:var(--text-dim);line-height:1.4;padding:4px 2px;}
+  .fav-font-chip{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);
+  }
+  .fav-font-chip:hover{background:var(--panel-2);}
+  .fav-font-chip .fav-font-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  .fav-font-chip .fav-font-remove{
+    flex-shrink:0;color:var(--text-dim);font-size:14px;line-height:1;padding:2px 5px;border-radius:4px;
+  }
+  .fav-font-chip .fav-font-remove:hover{color:#e2a2a2;background:rgba(255,255,255,.08);}
 
   /* ---------- Export popover ---------- */
   .export-wrap{position:relative;display:inline-flex;}
@@ -333,7 +355,8 @@
       </div>
 
       <div class="text-toolbar" id="textToolbar" title="Textkachel ist ausgewählt — Doppelklick auf den Text zum Bearbeiten des Inhalts">
-        <select id="textFontFamily" title="Schriftart">
+        <input type="text" id="textFontFamily" list="textFontFamilyList" title="Schriftart — tippe jeden auf deinem Mac installierten Schriftnamen ein, oder wähle aus der Liste" placeholder="Schriftart…">
+        <datalist id="textFontFamilyList">
           <option value="'Inter', sans-serif">Inter</option>
           <option value="'Fraunces', serif">Fraunces</option>
           <option value="Georgia, serif">Georgia</option>
@@ -341,7 +364,16 @@
           <option value="Arial, Helvetica, sans-serif">Arial</option>
           <option value="Verdana, sans-serif">Verdana</option>
           <option value="'Courier New', Courier, monospace">Courier New</option>
-        </select>
+        </datalist>
+        <button id="loadSystemFontsBtn" class="btn" title="Alle auf deinem Mac installierten Schriften laden (Chrome/Edge, einmalige Berechtigung) — danach über die Liste wählbar">🔤+</button>
+        <button id="favFontStarBtn" class="btn" title="Aktuelle Schriftart zu den Lieblingsschriften hinzufügen/entfernen">☆</button>
+        <div class="fav-fonts-wrap">
+          <button id="favFontsMenuBtn" class="btn" title="Lieblingsschriften öffnen">★ Favoriten</button>
+          <div class="fav-fonts-panel" id="favFontsPanel">
+            <div class="fav-fonts-empty" id="favFontsEmpty">Noch keine Lieblingsschriften — Schriftart wählen, dann ☆ klicken.</div>
+            <div class="fav-fonts-list" id="favFontsList"></div>
+          </div>
+        </div>
         <input type="number" id="textFontSize" min="6" max="600" step="1" title="Schriftgröße">
         <input type="color" id="textColorInput" title="Textfarbe" value="#1a1a1a">
         <button id="textBoldBtn" class="btn" title="Fett"><b>F</b></button>
@@ -360,7 +392,8 @@
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
 
-      <button id="saveBtn" class="btn">💾 Speichern</button>
+      <button id="saveBtn" class="btn" title="Überschreibt die aktuell geöffnete Collage">💾 save</button>
+      <button id="saveAsBtn" class="btn" title="Speichert eine neue Version/Kopie unter einem eigenen Namen — die aktuelle Collage bleibt unangetastet">💾 save as</button>
       <span id="currentProjectLabel" class="current-project-label"></span>
 
       <div class="color-control" title="Hintergrundfarbe der Arbeits-/Exportfläche">
@@ -2076,8 +2109,112 @@
     textAlignRightBtn.classList.toggle('active', t.textAlign === 'right');
     textLetterSpacing.value = t.letterSpacing;
     textLineHeight.value = t.lineHeight;
+    const favorited = isFontFavorited(t.fontFamily);
+    const starBtn = document.getElementById('favFontStarBtn');
+    starBtn.textContent = favorited ? '★' : '☆';
+    starBtn.classList.toggle('active', favorited);
   }
   textFontFamily.addEventListener('change', () => mutateSelectedTextResize(t => { t.fontFamily = textFontFamily.value; }));
+
+  // "🔤+": pulls in every font actually installed on the user's Mac (not just the 7 curated
+  // web-safe defaults above) via the Local Font Access API, so any of them can be picked from
+  // the textFontFamily field's suggestion list — or just typed in directly by name, which
+  // works everywhere (Safari/Firefox included) as long as that font is installed locally,
+  // since the browser resolves an installed system font from its family name with no extra
+  // loading step. queryLocalFonts() itself is Chrome/Edge-only and needs a one-time permission
+  // grant (must be called from this direct click, not programmatically on load).
+  document.getElementById('loadSystemFontsBtn').addEventListener('click', async () => {
+    if (!('queryLocalFonts' in window)){
+      alert('Das automatische Laden aller Mac-Schriften funktioniert nur in Chrome oder Edge (Local Font Access API). Du kannst trotzdem JEDE auf deinem Mac installierte Schrift benutzen — tipp ihren Namen einfach direkt in das Schriftart-Feld ein (genau so geschrieben wie z. B. in Word oder Pages angezeigt).');
+      return;
+    }
+    try {
+      const fonts = await window.queryLocalFonts();
+      const families = [...new Set(fonts.map(f => f.family))].sort((a, b) => a.localeCompare(b, 'de'));
+      const dl = document.getElementById('textFontFamilyList');
+      dl.querySelectorAll('option[data-system]').forEach(o => o.remove()); // clear a previous load first
+      families.forEach(fam => {
+        const opt = document.createElement('option');
+        opt.value = /[^a-zA-Z0-9-]/.test(fam) ? "'" + fam.replace(/'/g, "\\'") + "'" : fam;
+        opt.textContent = fam;
+        opt.dataset.system = '1';
+        dl.appendChild(opt);
+      });
+      alert(families.length + ' Schriften von deinem Mac geladen — jetzt im Schriftart-Feld auswählbar (oder einfach direkt eintippen).');
+    } catch(err){
+      console.error(err);
+      alert('Zugriff auf die Systemschriften wurde nicht erlaubt oder ist fehlgeschlagen. Du kannst trotzdem jeden Schriftnamen direkt eintippen.');
+    }
+  });
+
+  // ---------- Favorite fonts ("Ordner" of go-to fonts) ----------
+  function isFontFavorited(value){
+    return favoriteFonts.some(f => f.value === value);
+  }
+  function renderFavFontsPanel(){
+    const listEl = document.getElementById('favFontsList');
+    const emptyEl = document.getElementById('favFontsEmpty');
+    const menuBtn = document.getElementById('favFontsMenuBtn');
+    listEl.innerHTML = '';
+    emptyEl.style.display = favoriteFonts.length ? 'none' : 'block';
+    menuBtn.textContent = '★ Favoriten' + (favoriteFonts.length ? ' (' + favoriteFonts.length + ')' : '');
+    favoriteFonts.forEach((f, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'fav-font-chip';
+      chip.title = 'Klicken, um „' + f.label + '“ auf die ausgewählte Textkachel anzuwenden';
+
+      const name = document.createElement('span');
+      name.className = 'fav-font-name';
+      name.textContent = f.label;
+      name.style.fontFamily = f.value;
+      chip.appendChild(name);
+
+      const rm = document.createElement('span');
+      rm.className = 'fav-font-remove';
+      rm.textContent = '×';
+      rm.title = 'Aus Favoriten entfernen';
+      rm.addEventListener('click', async e => {
+        e.stopPropagation();
+        favoriteFonts.splice(idx, 1);
+        await saveFavoriteFonts();
+        renderFavFontsPanel();
+        updateTextToolbar();
+      });
+      chip.appendChild(rm);
+
+      chip.addEventListener('click', () => {
+        textFontFamily.value = f.value;
+        mutateSelectedTextResize(t => { t.fontFamily = f.value; });
+        document.getElementById('favFontsPanel').classList.remove('open');
+      });
+      listEl.appendChild(chip);
+    });
+  }
+  // ☆/★: adds (or removes) whatever's currently in the font field to the favorites list —
+  // works for curated defaults, freshly-loaded Mac system fonts, and freely typed names alike,
+  // since it just stores the exact CSS font-family string that's already applied.
+  document.getElementById('favFontStarBtn').addEventListener('click', async () => {
+    const value = textFontFamily.value.trim();
+    if (!value) return;
+    const idx = favoriteFonts.findIndex(f => f.value === value);
+    if (idx >= 0) favoriteFonts.splice(idx, 1);
+    else favoriteFonts.push({ label: fontLabelFromValue(value), value });
+    await saveFavoriteFonts();
+    renderFavFontsPanel();
+    updateTextToolbar();
+  });
+  const favFontsMenuBtn = document.getElementById('favFontsMenuBtn');
+  const favFontsPanel = document.getElementById('favFontsPanel');
+  favFontsMenuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    favFontsPanel.classList.toggle('open');
+  });
+  favFontsPanel.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', e => {
+    if (!favFontsPanel.contains(e.target) && e.target !== favFontsMenuBtn) favFontsPanel.classList.remove('open');
+  });
+  loadFavoriteFonts().then(renderFavFontsPanel);
+
   textFontSize.addEventListener('change', () => mutateSelectedTextResize(t => {
     t.fontSize = Math.max(6, parseFloat(textFontSize.value) || t.fontSize);
   }));
@@ -2262,7 +2399,7 @@
   // ---------- Save / Load projects (IndexedDB — named, multiple slots, keeps the actual photos) ----------
   function openDB(){
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open('joiner-db', 3);
+      const req = indexedDB.open('joiner-db', 4);
       req.onupgradeneeded = (e) => {
         const db = req.result;
         if (!db.objectStoreNames.contains('projects')){
@@ -2270,6 +2407,9 @@
         }
         if (!db.objectStoreNames.contains('bins')){
           db.createObjectStore('bins', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('settings')){
+          db.createObjectStore('settings', { keyPath: 'key' }); // small app-wide bits — e.g. favoriteFonts
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -2282,6 +2422,41 @@
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
+  }
+
+  // ---------- Favorite fonts (a little "folder" of go-to fonts for the text tool) ----------
+  // Each entry: { label: what's shown in the chip, value: the exact CSS font-family string
+  // applied to the tile — for curated fonts this keeps the quoted+fallback stack, for
+  // typed/system fonts it's just the plain name as the user entered it. Persisted in
+  // IndexedDB (same DB as projects/bins) so it survives across sessions and collages.
+  let favoriteFonts = [];
+  async function loadFavoriteFonts(){
+    try {
+      const db = await openDB();
+      const tx = db.transaction('settings', 'readonly');
+      const rec = await new Promise((resolve, reject) => {
+        const req = tx.objectStore('settings').get('favoriteFonts');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      db.close();
+      favoriteFonts = (rec && Array.isArray(rec.fonts)) ? rec.fonts : [];
+    } catch(err){
+      console.error('Konnte Lieblingsschriften nicht laden:', err);
+      favoriteFonts = [];
+    }
+  }
+  async function saveFavoriteFonts(){
+    const db = await openDB();
+    const tx = db.transaction('settings', 'readwrite');
+    tx.objectStore('settings').put({ key: 'favoriteFonts', fonts: favoriteFonts });
+    await txDone(tx);
+    db.close();
+  }
+  // A friendly display label from a raw CSS font-family value, e.g. "'Fraunces', serif" -> "Fraunces".
+  function fontLabelFromValue(value){
+    const first = (value || '').split(',')[0].trim();
+    return first.replace(/^['"]|['"]$/g, '') || value;
   }
 
   function defaultProjectName(){
@@ -2713,7 +2888,43 @@
 
       await putProjectRecord(id, name, folder);
       updateCurrentProjectLabel();
-      btn.textContent = '✓ Gespeichert';
+      btn.textContent = '✓ gespeichert';
+    } catch(err){
+      console.error(err);
+      btn.textContent = '✗ Fehler';
+    }
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  });
+
+  // "save as": always creates a NEW project record (own id) from the current board state,
+  // under a name you choose — the previously open project is left completely untouched.
+  // The new record becomes the active project afterwards, so plain "save" from here on
+  // updates THIS version. That's what makes it useful for keeping intermediate versions:
+  // click "save as" at any checkpoint to branch off a snapshot, then keep iterating.
+  document.getElementById('saveAsBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveAsBtn');
+    const original = btn.textContent;
+    try {
+      const suggested = state.currentProjectName ? state.currentProjectName + ' Kopie' : defaultProjectName();
+      const n = prompt('Name für diese Version:', suggested);
+      if (n === null) return;
+      const name = n.trim() || suggested;
+      const f = prompt('Bin (optional, z. B. "Azoren") — leer lassen für "Ohne Bin":', state.currentProjectFolder || lastUsedFolder);
+      if (f === null) return;
+      const folder = f.trim();
+
+      const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+      lastUsedFolder = folder;
+      if (folder) await ensureBinExists(folder);
+
+      await putProjectRecord(id, name, folder);
+      state.currentProjectId = id;
+      state.currentProjectName = name;
+      state.currentProjectFolder = folder;
+      state.pendingName = null;
+      state.pendingFolder = null;
+      updateCurrentProjectLabel();
+      btn.textContent = '✓ gespeichert';
     } catch(err){
       console.error(err);
       btn.textContent = '✗ Fehler';
