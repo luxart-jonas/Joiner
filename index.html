@@ -2292,7 +2292,6 @@
     const style = tile.italic ? 'italic' : 'normal';
     octx.font = style + ' ' + weight + ' ' + fontSizePx + 'px ' + tile.fontFamily;
     octx.fillStyle = tile.color;
-    octx.textBaseline = 'top';
     octx.textAlign = 'left';
     const spacingPx = (tile.letterSpacing || 0) * tile.imgScale * RES;
     if ('letterSpacing' in octx) octx.letterSpacing = spacingPx + 'px'; // Chrome/Firefox/Safari all support this now
@@ -2303,18 +2302,31 @@
     const originX = tile.imgOffsetX * RES;
     const originY = tile.imgOffsetY * RES;
 
+    // A browser lays out live text (line-height: tile.lineHeight) by centering each line's
+    // glyphs inside its line box via "half-leading", based on the FONT's own ascent+descent
+    // metrics — then the baseline sits at (half-leading + ascent) from the line box's top.
+    // canvas textBaseline='top' ignores all of that and anchors to a fixed offset from the
+    // draw point instead, which for line-height > 1 (the default 1.2 here) sits measurably
+    // higher than the live DOM position — exported text renders too high vs. the board. We
+    // replicate the browser's own algorithm here (measured via fontBoundingBoxAscent/Descent)
+    // so the exported baseline lines up with what's shown live.
+    const probe = octx.measureText('Hg');
+    const fontAscent = probe.fontBoundingBoxAscent != null ? probe.fontBoundingBoxAscent : fontSizePx * 0.8;
+    const fontDescent = probe.fontBoundingBoxDescent != null ? probe.fontBoundingBoxDescent : fontSizePx * 0.2;
+    const halfLeading = (lineHeightPx - (fontAscent + fontDescent)) / 2;
+    octx.textBaseline = 'alphabetic';
+
     lines.forEach((line, i) => {
       const lineW = octx.measureText(line).width;
       let drawX = originX;
       if (tile.textAlign === 'center') drawX = originX + (boxW - lineW) / 2;
       else if (tile.textAlign === 'right') drawX = originX + (boxW - lineW);
-      octx.fillText(line, drawX, originY + i * lineHeightPx);
+      const baselineY = originY + i * lineHeightPx + halfLeading + fontAscent;
+      octx.fillText(line, drawX, baselineY);
     });
 
     // No extra clip needed here: the offscreen canvas is already exactly the tile's own box
-    // size (cw x ch), so anything drawn outside it was never rasterized in the first place —
-    // and leaving the main canvas unclipped lets the tile's drop shadow (set by the caller)
-    // render normally instead of being cut off at the box edge.
+    // size (cw x ch), so anything drawn outside it was never rasterized in the first place.
     ctx.drawImage(off, 0, 0, cw, ch, 0, 0, tile.w * RES, tile.h * RES);
   }
 
@@ -2372,17 +2384,14 @@
           tile.cuts.forEach(cut => applyCanvasCutClip(ctx, cut, tile.w, tile.h, RES));
         }
 
-        // Matches the live editor's `.tile{box-shadow:0 4px 14px rgba(0,0,0,.5)}` — applied to
-        // every tile type (previously photo-only), so text tiles get the same drop shadow in
-        // the export that they show while editing instead of appearing to float flat.
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowBlur = 10 * RES;
-        ctx.shadowOffsetY = 3 * RES;
-
         if (tile.type === 'text'){
           drawTextTileToCanvas(ctx, tile, RES);
         } else {
           const img = results[i].value;
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 10 * RES;
+          ctx.shadowOffsetY = 3 * RES;
+
           const iw = tile.w * RES, ih = tile.h * RES;
           ensureCropDefaults(tile);
           // read exactly the source rectangle that's visible on screen for this tile's
