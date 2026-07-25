@@ -89,6 +89,14 @@
   }
   .tile:active{cursor:grabbing;}
   .tile img{position:absolute;display:block;user-select:none;-webkit-user-drag:none;pointer-events:none;}
+  .tile .text-content{
+    position:absolute;box-sizing:border-box;margin:0;white-space:pre;
+    -webkit-user-drag:none;cursor:inherit;
+  }
+  .tile .text-content[contenteditable="true"]{
+    outline:2px dashed rgba(212,175,55,.75);outline-offset:2px;cursor:text;
+    user-select:text;-webkit-user-select:text;white-space:pre-wrap;
+  }
   .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
   .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
   .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
@@ -110,6 +118,19 @@
   }
 
   .color-control{display:flex;align-items:center;gap:6px;}
+  .text-toolbar{display:none;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:var(--panel-2);flex-wrap:wrap;}
+  .text-toolbar select, .text-toolbar input[type=number]{
+    appearance:none;background:var(--panel);border:1px solid var(--border);border-radius:5px;
+    color:var(--text);font-family:'Inter',sans-serif;font-size:12.5px;padding:7px 8px;
+  }
+  .text-toolbar input[type=number]{width:56px;}
+  .text-toolbar select{max-width:132px;}
+  .text-toolbar input[type=color]{
+    width:32px;height:32px;padding:0;border:1px solid var(--border);border-radius:5px;
+    background:none;cursor:pointer;flex-shrink:0;
+  }
+  .text-toolbar .btn{padding:7px 10px;font-size:12.5px;}
+  .text-toolbar .btn.active{background:var(--gold);border-color:var(--gold);color:#1a1608;}
   .material-nav{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:var(--panel-2);}
   .material-nav .btn{padding:6px 10px;}
   .material-nav-label{font-size:12px;color:var(--text-dim);white-space:nowrap;}
@@ -302,9 +323,31 @@
         <button id="materialNextBtn" class="btn" title="Nächste 8 (Bild↓)">▶</button>
       </div>
 
+      <div class="text-toolbar" id="textToolbar" title="Textkachel ist ausgewählt — Doppelklick auf den Text zum Bearbeiten des Inhalts">
+        <select id="textFontFamily" title="Schriftart">
+          <option value="'Inter', sans-serif">Inter</option>
+          <option value="'Fraunces', serif">Fraunces</option>
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Times New Roman', Times, serif">Times New Roman</option>
+          <option value="Arial, Helvetica, sans-serif">Arial</option>
+          <option value="Verdana, sans-serif">Verdana</option>
+          <option value="'Courier New', Courier, monospace">Courier New</option>
+        </select>
+        <input type="number" id="textFontSize" min="6" max="600" step="1" title="Schriftgröße">
+        <input type="color" id="textColorInput" title="Textfarbe" value="#1a1a1a">
+        <button id="textBoldBtn" class="btn" title="Fett"><b>F</b></button>
+        <button id="textItalicBtn" class="btn" title="Kursiv"><i>K</i></button>
+        <button id="textAlignLeftBtn" class="btn" title="Linksbündig">≡◀</button>
+        <button id="textAlignCenterBtn" class="btn" title="Zentriert">≡≡</button>
+        <button id="textAlignRightBtn" class="btn" title="Rechtsbündig">≡▶</button>
+        <input type="number" id="textLetterSpacing" step="0.5" title="Zeichenabstand (px)">
+        <input type="number" id="textLineHeight" min="0.5" max="4" step="0.05" title="Zeilenabstand">
+      </div>
+
       <button id="loadBtn" class="btn">📁 Collage</button>
 
       <button id="addPhotosBtn" class="btn">＋ Fotos</button>
+      <button id="addTextBtn" class="btn" title="Textkachel hinzufügen — verhält sich wie eine Bildkachel: verschieben, drehen, skalieren, zuschneiden, Ebenen">🔤 Text</button>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
 
@@ -432,6 +475,7 @@
   let cutTileId = null;  // tile currently being cut with the P tool, or null
   let cutPoints = [];    // 0-3 points of the cut currently being placed (not yet committed)
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
+  let editingTileId = null; // id of the text tile currently being typed into (contenteditable), or null
   const modeBadge = document.getElementById('modeBadge');
   const materialNav = document.getElementById('materialNav');
   const materialNavLabel = document.getElementById('materialNavLabel');
@@ -514,6 +558,27 @@
     parts.push(cut.control ? ('Q ' + cut.control.x + ' ' + cut.control.y + ' ' + p1.x + ' ' + p1.y) : ('L ' + p1.x + ' ' + p1.y));
     parts.push('Z');
     return "path('" + parts.join(' ') + "')";
+  }
+  // Wraps mountPoint in nested clip-path layers for each committed cut (plus a live preview
+  // of the cut currently being placed, if any) and returns the innermost one to mount the
+  // tile's actual content (img or text-content) into. Shared by both tile types — the cut
+  // tool doesn't care what's inside, it just clips.
+  function buildCutLayers(tile, mountPoint, isCutting){
+    const committedCuts = tile.cuts ? tile.cuts.slice() : [];
+    const hasPending = isCutting && cutPoints.length >= 2;
+    const cuts = committedCuts.slice();
+    if (hasPending){
+      cuts.push({ p1: cutPoints[0], p2: cutPoints[1], control: cutPoints[2] || null });
+    }
+    cuts.forEach((cut, ci) => {
+      const layer = document.createElement('div');
+      layer.className = 'cut-layer';
+      layer.style.clipPath = cutCSSPath(cut, tile.w, tile.h);
+      if (hasPending && ci === cuts.length - 1) layer.dataset.pendingCut = 'true';
+      mountPoint.appendChild(layer);
+      mountPoint = layer;
+    });
+    return mountPoint;
   }
   function applyCanvasCutClip(ctx, cut, w, h, scale){
     const p1 = cutEdgeSnap(cut.p1, w, h), p2 = cutEdgeSnap(cut.p2, w, h);
@@ -796,6 +861,124 @@
     tile.imgOffsetY = (tile.h - tile.naturalH * scale) / 2;
   }
 
+  // ---------- Text tiles ----------
+  // A text tile behaves exactly like a photo tile (move/rotate/resize/crop/z-order all
+  // reuse the same generic code, keyed off tile.w/h/x/y/rot/imgScale/imgOffsetX/imgOffsetY),
+  // it just mounts a live DOM text node instead of an <img>. That's also what keeps it crisp
+  // at any scale — resizing changes the actual rendered font-size (real glyph re-render),
+  // never a bitmap stretch. tile.naturalW/naturalH here means "the text block's own size at
+  // imgScale 1", exactly parallel to a photo's natural pixel size.
+  let textMeasureEl = null;
+  function getTextMeasureEl(){
+    if (!textMeasureEl){
+      textMeasureEl = document.createElement('div');
+      textMeasureEl.style.position = 'fixed';
+      textMeasureEl.style.left = '-99999px';
+      textMeasureEl.style.top = '0';
+      textMeasureEl.style.whiteSpace = 'pre';
+      textMeasureEl.style.visibility = 'hidden';
+      textMeasureEl.style.pointerEvents = 'none';
+      textMeasureEl.style.margin = '0';
+      document.body.appendChild(textMeasureEl);
+    }
+    return textMeasureEl;
+  }
+  function measureTextTile(tile){
+    const el = getTextMeasureEl();
+    el.style.fontFamily = tile.fontFamily;
+    el.style.fontSize = tile.fontSize + 'px';
+    el.style.fontWeight = tile.bold ? '700' : '500';
+    el.style.fontStyle = tile.italic ? 'italic' : 'normal';
+    el.style.letterSpacing = (tile.letterSpacing || 0) + 'px';
+    el.style.lineHeight = tile.lineHeight;
+    el.textContent = tile.text || ' ';
+    return { w: Math.max(4, Math.ceil(el.offsetWidth)), h: Math.max(4, Math.ceil(el.offsetHeight)) };
+  }
+  // Re-measures the natural size after a content/font/spacing change, keeps the tile's
+  // on-screen CENTER fixed, and resets any crop — a prior crop window no longer makes sense
+  // once the underlying text (and therefore its shape) has changed.
+  function applyTextAttrChange(tile){
+    const scale = tile.imgScale || 1;
+    const cx = tile.x + tile.w/2, cy = tile.y + tile.h/2;
+    const size = measureTextTile(tile);
+    tile.naturalW = size.w; tile.naturalH = size.h;
+    tile.w = tile.naturalW * scale;
+    tile.h = tile.naturalH * scale;
+    tile.x = cx - tile.w/2;
+    tile.y = cy - tile.h/2;
+    tile.imgOffsetX = 0;
+    tile.imgOffsetY = 0;
+  }
+  function addTextTile(){
+    pushUndo();
+    const tile = {
+      id: 't' + (uid++), type: 'text',
+      text: 'Text',
+      fontFamily: "'Inter', sans-serif",
+      fontSize: 48,
+      color: '#1a1a1a',
+      bold: false, italic: false,
+      textAlign: 'left',
+      letterSpacing: 0,
+      lineHeight: 1.2,
+      x: 0, y: 0, w: 10, h: 10, rot: 0, z: ++maxZ,
+      imgScale: 1, imgOffsetX: 0, imgOffsetY: 0,
+      naturalW: 10, naturalH: 10,
+      isMaterial: false, broken: false, cuts: null
+    };
+    const size = measureTextTile(tile);
+    tile.naturalW = size.w; tile.naturalH = size.h;
+    tile.w = size.w; tile.h = size.h;
+    const wb = workspaceBounds();
+    const cx = wb.minX + wb.w/2, cy = wb.minY + wb.h/2;
+    tile.x = cx - tile.w/2;
+    tile.y = cy - tile.h/2;
+    state.tiles.push(tile);
+    state.selectedIds = new Set([tile.id]);
+    dragMode = 'move';
+    updateModeBadge();
+    enterTextEditMode(tile.id);
+  }
+  // Puts a text tile's content into live contenteditable mode (double-click on an existing
+  // one, or right after creating a new one) — selects the current text so typing overwrites it.
+  function enterTextEditMode(id){
+    const tile = state.tiles.find(t => t.id === id);
+    if (!tile || tile.type !== 'text') return;
+    editingTileId = id;
+    state.selectedIds = new Set([id]);
+    render();
+    setTimeout(() => {
+      const el = board.querySelector('[data-id="' + id + '"] .text-content');
+      if (!el) return;
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }, 0);
+  }
+  // Commits whatever's currently in the contenteditable div back onto the tile. An emptied-out
+  // text tile is removed instead of left behind as a blank box.
+  function commitTextEdit(id){
+    if (editingTileId !== id) return;
+    editingTileId = null;
+    const tile = state.tiles.find(t => t.id === id);
+    if (!tile){ render(); return; }
+    const el = board.querySelector('[data-id="' + id + '"] .text-content');
+    const newText = el ? el.textContent : tile.text;
+    if (!newText || !newText.trim()){
+      deleteTiles([id]);
+      return;
+    }
+    if (newText !== tile.text){
+      pushUndo();
+      tile.text = newText;
+      applyTextAttrChange(tile);
+    }
+    render();
+  }
+
   // Cmd/Ctrl+F: centers the whole composition so it has exactly the same margin on all four sides.
   function centerComposition(){
     if (!state.tiles.length) return;
@@ -902,45 +1085,66 @@
       el.style.zIndex = tile.z;
       el.dataset.id = tile.id;
 
-      const img = document.createElement('img');
-      img.draggable = false;
-      img.onerror = () => {
-        if (tile.broken) return; // already handled
-        tile.broken = true;
-        el.classList.add('broken');
-        renderBrokenFill(el, tile);
-      };
       let mountPoint = el;
-      if (!tile.broken){
-        img.src = tile.url;
+      let contentEl;
+
+      if (tile.type === 'text'){
         ensureCropDefaults(tile);
-        img.style.left = tile.imgOffsetX + 'px';
-        img.style.top = tile.imgOffsetY + 'px';
-        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
-        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
-
-        // committed cuts + (if this is the tile being cut right now) a live preview of the
-        // pending cut — each is a nested layer, so their clip-paths intersect naturally.
-        const committedCuts = tile.cuts ? tile.cuts.slice() : [];
-        const hasPending = isCutting && cutPoints.length >= 2;
-        const cuts = committedCuts.slice();
-        if (hasPending){
-          cuts.push({ p1: cutPoints[0], p2: cutPoints[1], control: cutPoints[2] || null });
+        contentEl = document.createElement('div');
+        contentEl.className = 'text-content';
+        contentEl.textContent = tile.text;
+        contentEl.style.fontFamily = tile.fontFamily;
+        contentEl.style.fontWeight = tile.bold ? '700' : '500';
+        contentEl.style.fontStyle = tile.italic ? 'italic' : 'normal';
+        contentEl.style.color = tile.color;
+        contentEl.style.textAlign = tile.textAlign;
+        contentEl.style.lineHeight = tile.lineHeight;
+        contentEl.style.left = tile.imgOffsetX + 'px';
+        contentEl.style.top = tile.imgOffsetY + 'px';
+        contentEl.style.width = (tile.naturalW * tile.imgScale) + 'px';
+        contentEl.style.height = (tile.naturalH * tile.imgScale) + 'px';
+        contentEl.style.fontSize = (tile.fontSize * tile.imgScale) + 'px';
+        contentEl.style.letterSpacing = ((tile.letterSpacing || 0) * tile.imgScale) + 'px';
+        if (tile.id === editingTileId){
+          contentEl.contentEditable = 'true';
+          contentEl.spellcheck = false;
+          contentEl.addEventListener('blur', () => commitTextEdit(tile.id));
+          contentEl.addEventListener('keydown', ev => {
+            ev.stopPropagation(); // don't let R/S/P/Delete/etc shortcuts fire while typing
+            if (ev.key === 'Escape'){ ev.preventDefault(); contentEl.blur(); }
+            else if (ev.key === 'Enter'){ ev.preventDefault(); document.execCommand('insertText', false, '\n'); }
+          });
+        } else {
+          contentEl.addEventListener('dblclick', ev => { ev.stopPropagation(); enterTextEditMode(tile.id); });
         }
-        cuts.forEach((cut, ci) => {
-          const layer = document.createElement('div');
-          layer.className = 'cut-layer';
-          layer.style.clipPath = cutCSSPath(cut, tile.w, tile.h);
-          if (hasPending && ci === cuts.length - 1) layer.dataset.pendingCut = 'true';
-          mountPoint.appendChild(layer);
-          mountPoint = layer;
-        });
-      }
-      mountPoint.appendChild(img);
 
-      if (tile.broken){
-        el.classList.add('broken');
-        renderBrokenFill(el, tile);
+        mountPoint = buildCutLayers(tile, mountPoint, isCutting);
+        mountPoint.appendChild(contentEl);
+      } else {
+        const img = document.createElement('img');
+        img.draggable = false;
+        img.onerror = () => {
+          if (tile.broken) return; // already handled
+          tile.broken = true;
+          el.classList.add('broken');
+          renderBrokenFill(el, tile);
+        };
+        if (!tile.broken){
+          img.src = tile.url;
+          ensureCropDefaults(tile);
+          img.style.left = tile.imgOffsetX + 'px';
+          img.style.top = tile.imgOffsetY + 'px';
+          img.style.width = (tile.naturalW * tile.imgScale) + 'px';
+          img.style.height = (tile.naturalH * tile.imgScale) + 'px';
+          mountPoint = buildCutLayers(tile, mountPoint, isCutting);
+        }
+        mountPoint.appendChild(img);
+        contentEl = img;
+
+        if (tile.broken){
+          el.classList.add('broken');
+          renderBrokenFill(el, tile);
+        }
       }
 
       if (isCutting){
@@ -953,7 +1157,7 @@
           h.dataset.cutIndex = idx;
           el.appendChild(h);
         });
-      } else if (tile.id === onlySelected){
+      } else if (tile.id === onlySelected && tile.id !== editingTileId){
         const del = document.createElement('div');
         del.className = 'handle delete-handle';
         del.textContent = '×';
@@ -980,11 +1184,17 @@
         }
       }
 
-      el.addEventListener('pointerdown', e => onTilePointerDown(e, tile, el));
+      el.addEventListener('pointerdown', e => {
+        // currently editing THIS tile's own text and the click landed inside it: let the
+        // browser place the cursor / select text normally instead of starting a drag
+        if (tile.id === editingTileId && (e.target === contentEl || contentEl.contains(e.target))) return;
+        onTilePointerDown(e, tile, el);
+      });
       el.addEventListener('contextmenu', e => e.preventDefault());
       board.appendChild(el);
     });
 
+    updateTextToolbar();
     updateBoardScale();
   }
 
@@ -1124,6 +1334,8 @@
 
   // ---------- Drag / Rotate / Resize ----------
   function onTilePointerDown(e, tile, elOriginal){
+    // clicking a different tile while a text tile is mid-edit: commit that edit first
+    if (editingTileId && editingTileId !== tile.id) commitTextEdit(editingTileId);
     e.stopPropagation();
     e.preventDefault();
     const cls = e.target.classList;
@@ -1213,6 +1425,9 @@
   }
 
   window.addEventListener('keydown', e => {
+    // Typing into a text tile's contenteditable — its own keydown listener already stops
+    // propagation, but bail out here too as a safety net (e.g. focus ending up elsewhere).
+    if (editingTileId) return;
     // While placing/adjusting a cut, Escape cancels it and Delete/Backspace steps back
     // (removes the last placed point, or the last already-committed cut if none pending)
     if (dragMode === 'cut'){
@@ -1429,7 +1644,8 @@
     const startScale = tile.imgScale, startOffX = tile.imgOffsetX, startOffY = tile.imgOffsetY;
     const centerBoardX = tile.x + tile.w/2, centerBoardY = tile.y + tile.h/2;
     let pushedUndo = false;
-    const img = el.querySelector('img');
+    const contentEl = el.querySelector('img, .text-content');
+    const isText = tile.type === 'text';
 
     function move(ev){
       if (!pushedUndo){ pushUndo(); pushedUndo = true; }
@@ -1448,11 +1664,17 @@
       el.style.height = tile.h + 'px';
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
-      if (img){
-        img.style.width = (tile.naturalW * tile.imgScale) + 'px';
-        img.style.height = (tile.naturalH * tile.imgScale) + 'px';
-        img.style.left = tile.imgOffsetX + 'px';
-        img.style.top = tile.imgOffsetY + 'px';
+      if (contentEl){
+        contentEl.style.width = (tile.naturalW * tile.imgScale) + 'px';
+        contentEl.style.height = (tile.naturalH * tile.imgScale) + 'px';
+        contentEl.style.left = tile.imgOffsetX + 'px';
+        contentEl.style.top = tile.imgOffsetY + 'px';
+        // text: also re-render the actual font at its new size (real glyph re-render, not
+        // a stretched bitmap) — this is what keeps text crisp at any scale.
+        if (isText){
+          contentEl.style.fontSize = (tile.fontSize * tile.imgScale) + 'px';
+          contentEl.style.letterSpacing = ((tile.letterSpacing || 0) * tile.imgScale) + 'px';
+        }
       }
     }
     function up(){
@@ -1474,7 +1696,7 @@
     const startClientX = e.clientX, startClientY = e.clientY;
     const MIN_SIZE = 24;
     let pushedUndo = false;
-    const img = el.querySelector('img');
+    const contentEl = el.querySelector('img, .text-content');
 
     function move(ev){
       if (!pushedUndo){ pushUndo(); pushedUndo = true; }
@@ -1508,7 +1730,7 @@
       }
       el.style.left = tile.x + 'px'; el.style.top = tile.y + 'px';
       el.style.width = tile.w + 'px'; el.style.height = tile.h + 'px';
-      if (img){ img.style.left = tile.imgOffsetX + 'px'; img.style.top = tile.imgOffsetY + 'px'; }
+      if (contentEl){ contentEl.style.left = tile.imgOffsetX + 'px'; contentEl.style.top = tile.imgOffsetY + 'px'; }
     }
     function up(){
       el.removeEventListener('pointermove', move);
@@ -1535,6 +1757,7 @@
       e.target.closest('.board-frame') === e.target.parentElement;
     if (!isBackground) return;
     if (e.target.classList.contains('tile') || e.target.closest('.tile')) return;
+    if (editingTileId) commitTextEdit(editingTileId);
     startMarqueeSelect(e);
   });
 
@@ -1734,6 +1957,78 @@
     openAddMediaModal();
   });
 
+  // ---------- Text tool toolbar ----------
+  const addTextBtn = document.getElementById('addTextBtn');
+  addTextBtn.addEventListener('click', addTextTile);
+
+  const textToolbar = document.getElementById('textToolbar');
+  const textFontFamily = document.getElementById('textFontFamily');
+  const textFontSize = document.getElementById('textFontSize');
+  const textColorInput = document.getElementById('textColorInput');
+  const textBoldBtn = document.getElementById('textBoldBtn');
+  const textItalicBtn = document.getElementById('textItalicBtn');
+  const textAlignLeftBtn = document.getElementById('textAlignLeftBtn');
+  const textAlignCenterBtn = document.getElementById('textAlignCenterBtn');
+  const textAlignRightBtn = document.getElementById('textAlignRightBtn');
+  const textLetterSpacing = document.getElementById('textLetterSpacing');
+  const textLineHeight = document.getElementById('textLineHeight');
+
+  function selectedTextTile(){
+    const ids = [...state.selectedIds];
+    if (ids.length !== 1) return null;
+    const t = state.tiles.find(x => x.id === ids[0]);
+    return (t && t.type === 'text') ? t : null;
+  }
+  // For attributes that change the text's natural size (font/weight/style/spacing/content):
+  // re-measure and reset any crop, since a crop window computed for the old shape no longer applies.
+  function mutateSelectedTextResize(mutator){
+    const t = selectedTextTile();
+    if (!t) return;
+    pushUndo();
+    mutator(t);
+    applyTextAttrChange(t);
+    render();
+  }
+  // For attributes that DON'T change natural size (color, alignment) — no crop reset needed.
+  function mutateSelectedTextStyle(mutator){
+    const t = selectedTextTile();
+    if (!t) return;
+    pushUndo();
+    mutator(t);
+    render();
+  }
+  function updateTextToolbar(){
+    const t = selectedTextTile();
+    textToolbar.style.display = t ? 'flex' : 'none';
+    if (!t) return;
+    textFontFamily.value = t.fontFamily;
+    textFontSize.value = Math.round(t.fontSize);
+    textColorInput.value = t.color;
+    textBoldBtn.classList.toggle('active', !!t.bold);
+    textItalicBtn.classList.toggle('active', !!t.italic);
+    textAlignLeftBtn.classList.toggle('active', t.textAlign === 'left');
+    textAlignCenterBtn.classList.toggle('active', t.textAlign === 'center');
+    textAlignRightBtn.classList.toggle('active', t.textAlign === 'right');
+    textLetterSpacing.value = t.letterSpacing;
+    textLineHeight.value = t.lineHeight;
+  }
+  textFontFamily.addEventListener('change', () => mutateSelectedTextResize(t => { t.fontFamily = textFontFamily.value; }));
+  textFontSize.addEventListener('change', () => mutateSelectedTextResize(t => {
+    t.fontSize = Math.max(6, parseFloat(textFontSize.value) || t.fontSize);
+  }));
+  textColorInput.addEventListener('input', () => mutateSelectedTextStyle(t => { t.color = textColorInput.value; }));
+  textBoldBtn.addEventListener('click', () => mutateSelectedTextResize(t => { t.bold = !t.bold; }));
+  textItalicBtn.addEventListener('click', () => mutateSelectedTextResize(t => { t.italic = !t.italic; }));
+  textAlignLeftBtn.addEventListener('click', () => mutateSelectedTextStyle(t => { t.textAlign = 'left'; }));
+  textAlignCenterBtn.addEventListener('click', () => mutateSelectedTextStyle(t => { t.textAlign = 'center'; }));
+  textAlignRightBtn.addEventListener('click', () => mutateSelectedTextStyle(t => { t.textAlign = 'right'; }));
+  textLetterSpacing.addEventListener('change', () => mutateSelectedTextResize(t => {
+    t.letterSpacing = parseFloat(textLetterSpacing.value) || 0;
+  }));
+  textLineHeight.addEventListener('change', () => mutateSelectedTextResize(t => {
+    t.lineHeight = Math.max(0.5, parseFloat(textLineHeight.value) || 1.2);
+  }));
+
   fileInput.addEventListener('change', e => {
     addFiles(e.target.files);
     fileInput.value = '';
@@ -1769,6 +2064,42 @@
     exportHint.textContent = 'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×).';
   }
 
+  // Draws a text tile directly with the canvas text API (never a rasterized snapshot of the
+  // DOM) so exported text stays exactly as crisp as the live preview at any export resolution.
+  // ctx is already translated/rotated to the tile's own top-left origin and clipped to any cuts.
+  function drawTextTileToCanvas(ctx, tile, RES){
+    ensureCropDefaults(tile);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, tile.w * RES, tile.h * RES); // crop window, same box the live tile clips to
+    ctx.clip();
+
+    const fontSizePx = tile.fontSize * tile.imgScale * RES;
+    const weight = tile.bold ? '700' : '500';
+    const style = tile.italic ? 'italic' : 'normal';
+    ctx.font = style + ' ' + weight + ' ' + fontSizePx + 'px ' + tile.fontFamily;
+    ctx.fillStyle = tile.color;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const spacingPx = (tile.letterSpacing || 0) * tile.imgScale * RES;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = spacingPx + 'px'; // Chrome/Firefox/Safari all support this now
+
+    const lines = (tile.text || '').split('\n');
+    const lineHeightPx = tile.fontSize * tile.imgScale * tile.lineHeight * RES;
+    const boxW = tile.naturalW * tile.imgScale * RES;
+    const originX = tile.imgOffsetX * RES;
+    const originY = tile.imgOffsetY * RES;
+
+    lines.forEach((line, i) => {
+      const lineW = ctx.measureText(line).width;
+      let drawX = originX;
+      if (tile.textAlign === 'center') drawX = originX + (boxW - lineW) / 2;
+      else if (tile.textAlign === 'right') drawX = originX + (boxW - lineW);
+      ctx.fillText(line, drawX, originY + i * lineHeightPx);
+    });
+    ctx.restore();
+  }
+
   exportBtn.addEventListener('click', e => {
     e.stopPropagation();
     if (!state.tiles.some(t => !t.isMaterial)){ alert('Noch keine Fotos auf der Arbeitsfläche — zieh zuerst welche aus dem Material-Fach heraus.'); return; }
@@ -1801,17 +2132,19 @@
       }
 
       const ordered = state.tiles.filter(t => !t.isMaterial).sort((a,b) => a.z - b.z);
-      const results = await Promise.allSettled(ordered.map(t => new Promise((resolve,reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = t.url;
-      })));
-      const skipped = results.filter(r => r.status === 'rejected').length;
+      const results = await Promise.allSettled(ordered.map(t => {
+        if (t.type === 'text') return Promise.resolve({ isText: true }); // no image to preload
+        return new Promise((resolve,reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = t.url;
+        });
+      }));
+      const skipped = results.filter((r,i) => r.status === 'rejected' && ordered[i].type !== 'text').length;
 
       ordered.forEach((tile, i) => {
         if (results[i].status !== 'fulfilled') return; // fehlendes Bild — bitte zuerst über "🔗 Verknüpfen" ersetzen
-        const img = results[i].value;
         ctx.save();
         ctx.translate((tile.x - wb.minX + tile.w/2) * RES, (tile.y - wb.minY + tile.h/2) * RES);
         ctx.rotate(tile.rot * Math.PI/180);
@@ -1821,19 +2154,24 @@
           tile.cuts.forEach(cut => applyCanvasCutClip(ctx, cut, tile.w, tile.h, RES));
         }
 
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowBlur = 10 * RES;
-        ctx.shadowOffsetY = 3 * RES;
+        if (tile.type === 'text'){
+          drawTextTileToCanvas(ctx, tile, RES);
+        } else {
+          const img = results[i].value;
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 10 * RES;
+          ctx.shadowOffsetY = 3 * RES;
 
-        const iw = tile.w * RES, ih = tile.h * RES;
-        ensureCropDefaults(tile);
-        // read exactly the source rectangle that's visible on screen for this tile's
-        // current crop/offset — keeps the export pixel-identical to what's shown live
-        const sx = -tile.imgOffsetX / tile.imgScale;
-        const sy = -tile.imgOffsetY / tile.imgScale;
-        const sw = tile.w / tile.imgScale;
-        const sh = tile.h / tile.imgScale;
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, iw, ih);
+          const iw = tile.w * RES, ih = tile.h * RES;
+          ensureCropDefaults(tile);
+          // read exactly the source rectangle that's visible on screen for this tile's
+          // current crop/offset — keeps the export pixel-identical to what's shown live
+          const sx = -tile.imgOffsetX / tile.imgScale;
+          const sy = -tile.imgOffsetY / tile.imgScale;
+          const sw = tile.w / tile.imgScale;
+          const sh = tile.h / tile.imgScale;
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, iw, ih);
+        }
         ctx.restore();
       });
 
@@ -1901,7 +2239,8 @@
       // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
       dirHandles: usedDirHandles(),
       tiles: state.tiles.map(t => ({
-        id: t.id, filename: t.filename || (t.blob && t.blob.name) || null,
+        id: t.id, type: t.type === 'text' ? 'text' : 'image',
+        filename: t.filename || (t.blob && t.blob.name) || null,
         handle: t.handle || null, dirId: t.dirId != null ? t.dirId : null, relPath: t.relPath || null,
         x:t.x, y:t.y, w:t.w, h:t.h, rot:t.rot, z:t.z,
         naturalW:t.naturalW, naturalH:t.naturalH,
@@ -1909,7 +2248,17 @@
         imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
         imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null,
         cuts: t.cuts || null,
-        isMaterial: !!t.isMaterial
+        isMaterial: !!t.isMaterial,
+        // text-tile-only fields — simply unused/undefined on photo tiles
+        text: t.type === 'text' ? t.text : undefined,
+        fontFamily: t.type === 'text' ? t.fontFamily : undefined,
+        fontSize: t.type === 'text' ? t.fontSize : undefined,
+        color: t.type === 'text' ? t.color : undefined,
+        bold: t.type === 'text' ? !!t.bold : undefined,
+        italic: t.type === 'text' ? !!t.italic : undefined,
+        textAlign: t.type === 'text' ? t.textAlign : undefined,
+        letterSpacing: t.type === 'text' ? t.letterSpacing : undefined,
+        lineHeight: t.type === 'text' ? t.lineHeight : undefined
       }))
     });
     await txDone(tx);
@@ -2002,6 +2351,27 @@
 
     const tiles = [];
     for (const r of record.tiles){
+      if (r.type === 'text'){
+        tiles.push({
+          id: r.id, type: 'text', broken: false,
+          text: r.text != null ? r.text : '',
+          fontFamily: r.fontFamily || "'Inter', sans-serif",
+          fontSize: r.fontSize != null ? r.fontSize : 48,
+          color: r.color || '#1a1a1a',
+          bold: !!r.bold, italic: !!r.italic,
+          textAlign: r.textAlign || 'left',
+          letterSpacing: r.letterSpacing != null ? r.letterSpacing : 0,
+          lineHeight: r.lineHeight != null ? r.lineHeight : 1.2,
+          naturalW: r.naturalW, naturalH: r.naturalH,
+          imgScale: r.imgScale != null ? r.imgScale : 1,
+          imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : 0,
+          imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : 0,
+          cuts: r.cuts || null,
+          isMaterial: !!r.isMaterial,
+          x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
+        });
+        continue;
+      }
       let blob = r.blob || null; // old-style saves from before lean storage still work directly
       let broken = false;
       if (!blob && r.dirId != null && dirGrant.get(r.dirId) && r.relPath){
