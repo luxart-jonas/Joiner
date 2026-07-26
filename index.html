@@ -110,6 +110,8 @@
   .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
   .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
   .tile.cut-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #ff9d5c;}
+  .tile.distress-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #c9a15a; cursor:crosshair;}
+  .tile.distress-mode .text-content{cursor:crosshair;}
   .cut-layer{position:absolute;left:0;top:0;width:100%;height:100%;}
   .handle.cut-point-handle{margin-left:-14px;margin-top:-14px;background:#ff9d5c;color:#3a1f08;font-size:12px;cursor:grab;}
   .handle.cut-point-handle:active{cursor:grabbing;}
@@ -385,6 +387,9 @@
         <button id="textAlignRightBtn" class="btn" title="Rechtsbündig">≡▶</button>
         <input type="number" id="textLetterSpacing" step="0.5" title="Zeichenabstand (px)">
         <input type="number" id="textLineHeight" min="0.5" max="4" step="0.05" title="Zeilenabstand">
+        <button id="textDistressBtn" class="btn" title="Verwitterungspinsel — Farbe abblättern lassen, damit sich der Text besser in den Hintergrund einfügt (B)">🖌️ Verwittern</button>
+        <input type="number" id="distressBrushSize" min="4" max="150" step="2" title="Pinselgröße" style="width:56px;">
+        <button id="distressResetBtn" class="btn" title="Verwitterung dieser Textkachel komplett zurücksetzen">↺ Verwitterung</button>
       </div>
 
       <button id="loadBtn" class="btn">📁 Collage</button>
@@ -515,9 +520,10 @@
   let viewZoom = 1; // user-controlled zoom on top of the auto-fit scale (+/- keys)
   let uid = 1;
   let maxZ = 0;
-  let dragMode = 'move'; // 'move' | 'rotate' | 'crop' | 'cut' — toggled with R / S / P
+  let dragMode = 'move'; // 'move' | 'rotate' | 'crop' | 'cut' | 'distress' — toggled with R / S / P / B
   let cutTileId = null;  // tile currently being cut with the P tool, or null
   let cutPoints = [];    // 0-3 points of the cut currently being placed (not yet committed)
+  let brushSize = 22;    // current distress-brush radius (tile-box-local units), adjusted with [ / ]
   let blockCursor = { x:0, y:0, rowH:0 }; // where the next newly-added photo lands in the block layout
   let editingTileId = null; // id of the text tile currently being typed into (contenteditable), or null
   let lastTileClickId = null; let lastTileClickTime = 0; // manual double-click tracking (see onTilePointerDown)
@@ -539,6 +545,11 @@
       modeBadge.textContent = n === 0 ? '✂️ Schnitt: 1. Punkt an einen Rand klicken · P zum Beenden'
         : n === 1 ? '✂️ Schnitt: 2. Punkt an einen anderen Rand klicken (im Uhrzeigersinn bleibt erhalten) · P zum Beenden'
         : '✂️ Schnitt aktiv — optional 3. Punkt auf der Linie für Kurve · Punkte ziehen zum Anpassen · Shift+Entf: alles zurücksetzen · P zum Beenden';
+    }
+    else if (dragMode === 'distress'){
+      modeBadge.style.display = 'inline-flex';
+      modeBadge.textContent = '🖌️ Verwitterungspinsel — auf den Text malen · Größe ' + Math.round(brushSize) +
+        ' ([ / ] ändern) · Shift+Entf: diese Kachel zurücksetzen · B zum Beenden';
     }
     else modeBadge.style.display = 'none';
   }
@@ -640,6 +651,199 @@
     ctx.closePath();
     ctx.clip();
   }
+  // ---------- Distress / "flaking paint" brush for text tiles ----------
+  // A stroke is stored as {x, y, r} in the tile's own box-local units (0,0)=top-left,
+  // (tile.w,tile.h)=bottom-right — the exact same coordinate space the cut tool above already
+  // uses for its points. That keeps the math (and its known trade-offs, e.g. staying valid
+  // only until the tile's w/h changes) consistent with the rest of the app instead of inventing
+  // a second parallel coordinate system.
+  //
+  // The "paint chipping" look comes from a single deterministic stamp texture built once at
+  // load (seeded PRNG value-noise, bilinearly upsampled, with a radial falloff so it stays
+  // roughly round). Every dab of every stroke reuses that SAME bitmap — so a given stroke
+  // always rasterizes identically whether it's shown live (as a CSS mask) or baked into the
+  // export canvas (punched directly into the text bitmap with destination-out), which is what
+  // keeps live preview and export pixel-consistent, exactly like the rest of this tool.
+  const DISTRESS_STAMP_SIZE = 128;
+  function seededRandom(seed){
+    let s = seed % 2147483647;
+    if (s <= 0) s += 2147483646;
+    return function(){
+      s = (s * 16807) % 2147483647;
+      return (s - 1) / 2147483646;
+    };
+  }
+  function buildDistressStamp(){
+    const N = DISTRESS_STAMP_SIZE;
+    const canvas = document.createElement('canvas');
+    canvas.width = N; canvas.height = N;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(N, N);
+    const rand = seededRandom(918273);
+    const GRID = 10; // low-res noise grid, bilinearly upsampled below for an organic edge
+    const grid = [];
+    for (let i = 0; i <= GRID; i++){
+      const row = [];
+      for (let j = 0; j <= GRID; j++) row.push(rand());
+      grid.push(row);
+    }
+    function noiseAt(u, v){
+      const gx = u * GRID, gy = v * GRID;
+      const x0 = Math.floor(gx), y0 = Math.floor(gy);
+      const x1 = Math.min(GRID, x0 + 1), y1 = Math.min(GRID, y0 + 1);
+      const fx = gx - x0, fy = gy - y0;
+      const top = grid[x0][y0] * (1 - fx) + grid[x1][y0] * fx;
+      const bot = grid[x0][y1] * (1 - fx) + grid[x1][y1] * fx;
+      return top * (1 - fy) + bot * fy;
+    }
+    const cx = N / 2, cy = N / 2, maxR = N / 2;
+    for (let y = 0; y < N; y++){
+      for (let x = 0; x < N; x++){
+        const dx = (x - cx) / maxR, dy = (y - cy) / maxR;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const falloff = Math.max(0, 1 - dist*dist); // stays roughly circular
+        const n = noiseAt(x / N, y / N);
+        let a = falloff * (0.3 + 0.9 * n); // noise decides the ragged, patchy edge
+        a = Math.max(0, Math.min(1, a));
+        const idx = (y * N + x) * 4;
+        img.data[idx] = 0; img.data[idx+1] = 0; img.data[idx+2] = 0;
+        img.data[idx+3] = Math.round(a * 255);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+  const DISTRESS_STAMP = buildDistressStamp();
+
+  // Punches one dab of the flaking texture into ctx at (cx, cy) with radius r — ctx's OWN
+  // pixel space, whatever that currently means to the caller (CSS px for the live mask canvas,
+  // export px for the offscreen text canvas). Always erases (destination-out) regardless of
+  // whatever composite mode the caller had set, and restores it afterwards.
+  function stampDistressDab(ctx, cx, cy, r){
+    if (!(r > 0)) return;
+    const prevOp = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(DISTRESS_STAMP, cx - r, cy - r, r * 2, r * 2);
+    ctx.globalCompositeOperation = prevOp;
+  }
+
+  // A cheap-to-compare fingerprint for a tile's current distress state, used to avoid
+  // rebuilding (and re-encoding to a data URL) the live CSS mask on every render() pass —
+  // only when the strokes actually changed (or the box was resized) is it worth redoing.
+  function distressFingerprint(tile){
+    const s = tile.distressStrokes;
+    if (!s || !s.length) return 'none';
+    const last = s[s.length - 1];
+    return tile.w.toFixed(1) + 'x' + tile.h.toFixed(1) + '_' + s.length + '_' +
+      last.x.toFixed(1) + '_' + last.y.toFixed(1) + '_' + last.r.toFixed(1);
+  }
+
+  // Builds the actual mask bitmap: opaque white everywhere (= fully visible), then each
+  // stroke punches a hole (destination-out) at its stored tile-box-local position/radius.
+  // Sized 1:1 with the tile's current box (CSS px) so it lines up exactly when applied with
+  // mask-size:100% 100% to an element that itself spans that same box.
+  function renderDistressMaskCanvas(tile){
+    const w = Math.max(1, Math.round(tile.w));
+    const h = Math.max(1, Math.round(tile.h));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    (tile.distressStrokes || []).forEach(s => stampDistressDab(ctx, s.x, s.y, s.r));
+    return canvas;
+  }
+
+  // Applies (or clears) the live distress mask on `maskTarget` — the tile's outer clip
+  // container, which spans exactly the tile's own (0,0)-(w,h) box, matching the coordinate
+  // space distressStrokes are stored in. Cached per-tile via distressFingerprint() so dragging
+  // other tiles / selecting / etc doesn't pay for a canvas rebuild + toDataURL() every render().
+  function applyDistressMask(tile, maskTarget){
+    const strokes = tile.distressStrokes;
+    if (!strokes || !strokes.length){
+      maskTarget.style.maskImage = '';
+      maskTarget.style.webkitMaskImage = '';
+      return;
+    }
+    const key = distressFingerprint(tile);
+    if (tile._maskCacheKey !== key || !tile._maskDataURL){
+      tile._maskDataURL = renderDistressMaskCanvas(tile).toDataURL();
+      tile._maskCacheKey = key;
+    }
+    const url = 'url(' + tile._maskDataURL + ')';
+    maskTarget.style.maskImage = url;
+    maskTarget.style.webkitMaskImage = url;
+    maskTarget.style.maskSize = '100% 100%';
+    maskTarget.style.webkitMaskSize = '100% 100%';
+    maskTarget.style.maskRepeat = 'no-repeat';
+    maskTarget.style.webkitMaskRepeat = 'no-repeat';
+  }
+
+  // Screen pointer position -> this tile's own box-local coordinates (same 0..w / 0..h space
+  // as cut points above), accounting for the board's zoom (boardScale) and the tile's own
+  // rotation — mirrors the transform placeCutPoint() below uses for the same purpose.
+  function pointerToTileLocal(e, tile, el){
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    const dx = (e.clientX - cx) / boardScale, dy = (e.clientY - cy) / boardScale;
+    const rad = -tile.rot * Math.PI/180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    return { x: dx*cos - dy*sin + tile.w/2, y: dx*sin + dy*cos + tile.h/2 };
+  }
+
+  // Interaction handler for painting distress strokes (mirrors startDragGroup / startCutPointDrag:
+  // one pushUndo() per whole gesture, direct DOM update while dragging, full render() only on
+  // pointerup). Dabs are added along the path between successive pointer positions (not just at
+  // each move event) so a fast swipe still reads as one continuous stroke instead of dots.
+  function startDistressPaint(e, tile, el){
+    e.stopPropagation();
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    let pushedUndo = false;
+    let lastPt = null;
+    const spacing = Math.max(3, brushSize * 0.35);
+
+    function addDab(pt){
+      // Reassigns (never .push()es in place) so the array reference captured by the pending
+      // undo snapshot at gesture-start stays untouched — matters because pushUndo() only
+      // shallow-copies each tile, so mutating an existing array in place would silently
+      // corrupt that snapshot too (undo would no longer be able to remove this stroke).
+      tile.distressStrokes = (tile.distressStrokes || []).concat([{ x: pt.x, y: pt.y, r: brushSize }]);
+    }
+    function refreshLiveMask(){
+      const clipEl = el.querySelector('.tile-clip');
+      if (clipEl) applyDistressMask(tile, clipEl);
+    }
+    function paintAt(ev){
+      if (!pushedUndo){ pushUndo(); pushedUndo = true; }
+      const pt = pointerToTileLocal(ev, tile, el);
+      if (lastPt){
+        const dist = Math.hypot(pt.x - lastPt.x, pt.y - lastPt.y);
+        if (dist >= spacing){
+          const steps = Math.ceil(dist / spacing);
+          for (let i = 1; i <= steps; i++){
+            const f = i / steps;
+            addDab({ x: lastPt.x + (pt.x - lastPt.x) * f, y: lastPt.y + (pt.y - lastPt.y) * f });
+          }
+          lastPt = pt;
+        }
+      } else {
+        addDab(pt);
+        lastPt = pt;
+      }
+      refreshLiveMask();
+    }
+    paintAt(e);
+    function move(ev){ paintAt(ev); }
+    function up(){
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      updateTextToolbar();
+    }
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  }
+
   function placeCutPoint(e, tile, el){
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -981,7 +1185,8 @@
       x: 0, y: 0, w: 10, h: 10, rot: 0, z: ++maxZ,
       imgScale: 1, imgOffsetX: 0, imgOffsetY: 0,
       naturalW: 10, naturalH: 10,
-      isMaterial: false, broken: false, cuts: null
+      isMaterial: false, broken: false, cuts: null,
+      distressStrokes: []
     };
     const size = measureTextTile(tile);
     tile.naturalW = size.w; tile.naturalH = size.h;
@@ -1133,6 +1338,7 @@
       el.className = 'tile' + (isSelected ? ' selected' : '')
         + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '')
         + (isSelected && dragMode === 'crop' ? ' crop-mode' : '')
+        + (isSelected && dragMode === 'distress' && tile.type === 'text' ? ' distress-mode' : '')
         + (isCutting ? ' cut-mode' : '');
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
@@ -1180,6 +1386,7 @@
 
         mountPoint = buildCutLayers(tile, mountPoint, isCutting);
         mountPoint.appendChild(contentEl);
+        applyDistressMask(tile, tileClip);
       } else {
         const img = document.createElement('img');
         img.draggable = false;
@@ -1460,6 +1667,10 @@
     if (cls.contains('crop-handle')) { startEdgeCrop(e, tile, el, e.target.dataset.edge); return; }
 
     if (e.altKey || dragMode === 'rotate'){ startRotateGroup(e, tile); return; }
+    // Distress brush: only meaningful on text tiles — clicking a photo tile while the brush
+    // happens to still be "on" (selection changed away from any text tile) just moves it as
+    // usual instead of silently doing nothing.
+    if (dragMode === 'distress' && tile.type === 'text'){ startDistressPaint(e, tile, el); return; }
     startDragGroup(e, tile);
   }
 
@@ -1571,6 +1782,35 @@
         return;
       }
     }
+    // While the distress brush is active: Escape exits it, Shift+Delete clears everything
+    // painted on the current tile so far, [ / ] shrink/grow the brush.
+    if (dragMode === 'distress'){
+      if (e.key === 'Escape'){
+        e.preventDefault();
+        dragMode = 'move';
+        updateModeBadge();
+        render();
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey){
+        e.preventDefault();
+        const t = state.tiles.find(x => state.selectedIds.has(x.id) && x.type === 'text');
+        if (t && t.distressStrokes && t.distressStrokes.length){
+          pushUndo();
+          t.distressStrokes = [];
+          t._maskCacheKey = null;
+          render();
+        }
+        return;
+      }
+      if (e.key === '[' || e.key === ']'){
+        e.preventDefault();
+        brushSize = e.key === '[' ? Math.max(4, brushSize - 4) : Math.min(150, brushSize + 4);
+        updateModeBadge();
+        updateTextToolbar();
+        return;
+      }
+    }
     // Global view zoom — works everywhere, no selection needed
     if (e.key === '+' || e.key === '='){
       e.preventDefault();
@@ -1674,6 +1914,18 @@
           updateModeBadge();
           render();
         }
+        return;
+      }
+      if (e.key === 'b' || e.key === 'B'){
+        e.preventDefault();
+        if (dragMode === 'distress'){
+          dragMode = 'move';
+        } else if (state.selectedIds.size === 1){
+          const t = state.tiles.find(x => x.id === [...state.selectedIds][0]);
+          if (t && t.type === 'text') dragMode = 'distress';
+        }
+        updateModeBadge();
+        render();
         return;
       }
     }
@@ -1909,7 +2161,9 @@
       id: 't' + (uid++), z: ++maxZ,
       x: src.x + offset, y: src.y + offset,
       isMaterial: false,
-      cuts: src.cuts ? src.cuts.map(c => ({ ...c })) : src.cuts
+      cuts: src.cuts ? src.cuts.map(c => ({ ...c })) : src.cuts,
+      distressStrokes: src.distressStrokes ? src.distressStrokes.map(s => ({ ...s })) : src.distressStrokes,
+      _maskCacheKey: null, _maskDataURL: null
     }));
     state.tiles.push(...clones);
     state.selectedIds = new Set(clones.map(t => t.id));
@@ -1927,7 +2181,11 @@
     if (!state.selectedIds.size) return;
     const sourceTiles = state.tiles.filter(t => state.selectedIds.has(t.id) && !t.isMaterial);
     if (!sourceTiles.length) return;
-    tileClipboard = sourceTiles.map(t => ({ ...t, cuts: t.cuts ? t.cuts.map(c => ({ ...c })) : t.cuts }));
+    tileClipboard = sourceTiles.map(t => ({
+      ...t,
+      cuts: t.cuts ? t.cuts.map(c => ({ ...c })) : t.cuts,
+      distressStrokes: t.distressStrokes ? t.distressStrokes.map(s => ({ ...s })) : t.distressStrokes
+    }));
   }
 
   function pasteClipboard(){
@@ -2161,6 +2419,9 @@
   const textAlignRightBtn = document.getElementById('textAlignRightBtn');
   const textLetterSpacing = document.getElementById('textLetterSpacing');
   const textLineHeight = document.getElementById('textLineHeight');
+  const textDistressBtn = document.getElementById('textDistressBtn');
+  const distressBrushSize = document.getElementById('distressBrushSize');
+  const distressResetBtn = document.getElementById('distressResetBtn');
 
   function selectedTextTile(){
     const ids = [...state.selectedIds];
@@ -2200,6 +2461,9 @@
     textAlignRightBtn.classList.toggle('active', t.textAlign === 'right');
     textLetterSpacing.value = t.letterSpacing;
     textLineHeight.value = t.lineHeight;
+    textDistressBtn.classList.toggle('active', dragMode === 'distress');
+    distressBrushSize.value = Math.round(brushSize);
+    distressResetBtn.disabled = !(t.distressStrokes && t.distressStrokes.length);
     const favorited = isFontFavorited(t.fontFamily);
     const starBtn = document.getElementById('favFontStarBtn');
     starBtn.textContent = favorited ? '★' : '☆';
@@ -2321,6 +2585,29 @@
   textLineHeight.addEventListener('change', () => mutateSelectedTextResize(t => {
     t.lineHeight = Math.max(0.5, parseFloat(textLineHeight.value) || 1.2);
   }));
+
+  // ---------- Distress brush toolbar controls (mirror the B / [ / ] / Shift+Delete shortcuts) ----------
+  textDistressBtn.addEventListener('click', () => {
+    const t = selectedTextTile();
+    if (!t) return;
+    dragMode = dragMode === 'distress' ? 'move' : 'distress';
+    updateModeBadge();
+    render();
+  });
+  distressBrushSize.addEventListener('change', () => {
+    const v = parseFloat(distressBrushSize.value);
+    if (v > 0) brushSize = Math.max(4, Math.min(150, v));
+    distressBrushSize.value = Math.round(brushSize);
+    updateModeBadge();
+  });
+  distressResetBtn.addEventListener('click', () => {
+    const t = selectedTextTile();
+    if (!t || !t.distressStrokes || !t.distressStrokes.length) return;
+    pushUndo();
+    t.distressStrokes = [];
+    t._maskCacheKey = null;
+    render();
+  });
 
   fileInput.addEventListener('change', e => {
     addFiles(e.target.files);
@@ -2459,6 +2746,13 @@
       const baselineY = originY + i * lineHeightPx + halfLeading + fontAscent;
       octx.fillText(line, drawX, baselineY);
     });
+
+    // Punch the same distress strokes directly into the just-painted glyphs (destination-out),
+    // using the identical stamp texture the live CSS mask uses — distressStrokes are stored in
+    // tile-box-local units (0..tile.w, 0..tile.h) and this offscreen canvas IS that same box,
+    // just scaled by RES, so the coordinates only need the one RES multiply to line up exactly
+    // with what's shown live.
+    (tile.distressStrokes || []).forEach(s => stampDistressDab(octx, s.x * RES, s.y * RES, s.r * RES));
 
     // No extra clip needed here: the offscreen canvas is already exactly the tile's own box
     // size (cw x ch), so anything drawn outside it was never rasterized in the first place.
@@ -2681,7 +2975,8 @@
         italic: t.type === 'text' ? !!t.italic : undefined,
         textAlign: t.type === 'text' ? t.textAlign : undefined,
         letterSpacing: t.type === 'text' ? t.letterSpacing : undefined,
-        lineHeight: t.type === 'text' ? t.lineHeight : undefined
+        lineHeight: t.type === 'text' ? t.lineHeight : undefined,
+        distressStrokes: t.type === 'text' ? (t.distressStrokes || []) : undefined
       }))
     });
     await txDone(tx);
@@ -2790,6 +3085,7 @@
           imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : 0,
           imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : 0,
           cuts: r.cuts || null,
+          distressStrokes: r.distressStrokes || [],
           isMaterial: !!r.isMaterial,
           x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
         });
