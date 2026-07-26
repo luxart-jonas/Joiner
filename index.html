@@ -213,6 +213,7 @@
   .export-panel .checkline{display:flex;align-items:center;gap:8px;}
   .export-panel .checkline label{margin:0;color:var(--text);font-size:13px;}
   .export-panel .hint{font-size:11px;color:var(--text-dim);margin-top:3px;line-height:1.4;}
+  .export-panel .hint.export-hint-warn{color:#ff8a65;font-weight:600;}
   .export-panel .btn{width:100%;justify-content:center;}
 
   /* ---------- Relink (missing images) ---------- */
@@ -2252,6 +2253,12 @@
 
   // ---------- Export ----------
   const DEFAULT_RES = 2.5;
+  // Empirically confirmed (Chromium, tested directly): a canvas silently stops actually
+  // rendering once its total pixel area gets too large — no error is thrown, drawing calls
+  // just produce blank/transparent pixels beyond a certain point. The measured ceiling sits
+  // right around 16384×16384 (~268 million px total); we stay comfortably under that with a
+  // safety margin, since the exact limit can vary a bit by browser/OS/GPU.
+  const SAFE_CANVAS_AREA = 240000000;
   const exportBtn = document.getElementById('exportBtn');
   const exportPanel = document.getElementById('exportPanel');
   const exportWidthInput = document.getElementById('exportWidthInput');
@@ -2259,12 +2266,50 @@
   const exportTransparent = document.getElementById('exportTransparent');
   const exportConfirmBtn = document.getElementById('exportConfirmBtn');
 
+  // The largest export resolution (RES = export-px per board-px) that still uses only REAL
+  // pixel data from a photo tile's source image — anything beyond this just interpolates
+  // (upsamples) rather than showing more actual detail. Different tiles can have different
+  // imgScale (crops/zooms vary), so this reports the MEDIAN across all photo tiles: the
+  // resolution most of the collage's photos can genuinely support.
+  function photoNativeCeilingRES(){
+    const scales = state.tiles
+      .filter(t => t.type !== 'text' && !t.isMaterial && t.imgScale > 0)
+      .map(t => 1 / t.imgScale);
+    if (!scales.length) return null;
+    scales.sort((a,b) => a-b);
+    const mid = Math.floor(scales.length / 2);
+    return scales.length % 2 ? scales[mid] : (scales[mid-1] + scales[mid]) / 2;
+  }
+
   function updateExportHint(){
     const wb = workspaceBounds();
     const bw = Math.round(wb.w), bh = Math.round(wb.h);
     if (!exportWidthInput.value) exportWidthInput.placeholder = Math.round(bw * DEFAULT_RES);
-    exportHint.textContent = 'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×).';
+
+    const browserSafeMaxW = Math.floor(Math.sqrt(SAFE_CANVAS_AREA * (bw / bh)));
+    const nativeRES = photoNativeCeilingRES();
+    const nativeMaxW = nativeRES ? Math.round(bw * nativeRES) : null;
+    const sensibleMaxW = nativeMaxW ? Math.min(nativeMaxW, browserSafeMaxW) : browserSafeMaxW;
+
+    exportHint.classList.remove('export-hint-warn');
+    exportHint.textContent =
+      'Seitenverhältnis der Fläche: ' + bw + '×' + bh + ' — leer lassen für Standardqualität (' + DEFAULT_RES + '×). ' +
+      'Sinnvolles Maximum für dieses Projekt: ~' + sensibleMaxW.toLocaleString('de-DE') + ' px Breite' +
+      (nativeMaxW && nativeMaxW < browserSafeMaxW
+        ? ' (mehr zeigt keine zusätzliche Bildschärfe deiner Fotos mehr, nur noch Interpolation).'
+        : ' (technische Grenze des Browsers).');
+
+    const typedWidth = parseFloat(exportWidthInput.value);
+    if (typedWidth && typedWidth > 0){
+      const typedHeight = typedWidth * (bh / bw);
+      if (typedWidth * typedHeight > SAFE_CANVAS_AREA){
+        exportHint.textContent = '⚠️ ' + Math.round(typedWidth).toLocaleString('de-DE') + ' px ist zu groß — oberhalb von ca. ' +
+          browserSafeMaxW.toLocaleString('de-DE') + ' px Breite liefert der Browser oft ein leeres/kaputtes Bild, ohne Fehlermeldung. Bitte kleiner wählen.';
+        exportHint.classList.add('export-hint-warn');
+      }
+    }
   }
+  exportWidthInput.addEventListener('input', updateExportHint);
 
   // Draws a text tile directly with the canvas text API (never a rasterized snapshot of the
   // DOM) so exported text stays exactly as crisp as the live preview at any export resolution.
@@ -2343,6 +2388,26 @@
 
   exportConfirmBtn.addEventListener('click', async () => {
     if (!state.tiles.some(t => !t.isMaterial)){ alert('Noch keine Fotos auf der Arbeitsfläche — zieh zuerst welche aus dem Material-Fach heraus.'); return; }
+
+    // Pre-flight size check, BEFORE we spend any time preloading images/drawing: a canvas this
+    // large won't error out, it'll just silently render blank/broken (see SAFE_CANVAS_AREA
+    // above) — so warn and let the person back out rather than have them wait through a long
+    // export only to download an empty PNG.
+    {
+      const wbCheck = workspaceBounds();
+      const targetWidthCheck = parseFloat(exportWidthInput.value);
+      const checkW = Math.round(targetWidthCheck && targetWidthCheck > 0 ? targetWidthCheck : wbCheck.w * DEFAULT_RES);
+      const checkH = Math.round(checkW * (wbCheck.h / wbCheck.w));
+      if (checkW * checkH > SAFE_CANVAS_AREA){
+        const proceed = confirm(
+          'Diese Auflösung (' + checkW.toLocaleString('de-DE') + '×' + checkH.toLocaleString('de-DE') + ' px) liegt über der ' +
+          'sicheren Grenze deines Browsers. Der Export dauert dann sehr lange und kommt möglicherweise leer oder ' +
+          'beschädigt heraus, ohne Fehlermeldung. Trotzdem versuchen?'
+        );
+        if (!proceed) return;
+      }
+    }
+
     const originalText = exportConfirmBtn.textContent;
     exportConfirmBtn.textContent = 'Exportiere…';
     exportConfirmBtn.disabled = true;
