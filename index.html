@@ -353,6 +353,7 @@
         <button id="materialPrevBtn" class="btn" title="Vorherige 8 (Bild↑)">◀</button>
         <span id="materialNavLabel" class="material-nav-label"></span>
         <button id="materialNextBtn" class="btn" title="Nächste 8 (Bild↓)">▶</button>
+        <button id="materialClearBtn" class="btn btn-ghost" title="Alle verbleibenden Fotos im Material-Fach entfernen (nur unbenutzte — was schon auf der Arbeitsfläche liegt, bleibt unangetastet)">🗑️ Material leeren</button>
       </div>
 
       <div class="text-toolbar" id="textToolbar" title="Textkachel ist ausgewählt — Doppelklick auf den Text zum Bearbeiten des Inhalts">
@@ -525,8 +526,10 @@
   const materialNavLabel = document.getElementById('materialNavLabel');
   const materialPrevBtn = document.getElementById('materialPrevBtn');
   const materialNextBtn = document.getElementById('materialNextBtn');
+  const materialClearBtn = document.getElementById('materialClearBtn');
   materialPrevBtn.addEventListener('click', materialPrevPage);
   materialNextBtn.addEventListener('click', materialNextPage);
+  materialClearBtn.addEventListener('click', clearMaterial);
   function updateModeBadge(){
     if (dragMode === 'rotate'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '🔄 Drehmodus — R zum Beenden'; }
     else if (dragMode === 'crop'){ modeBadge.style.display = 'inline-flex'; modeBadge.textContent = '✂️ Schneidemodus — Kante ziehen · S zum Beenden'; }
@@ -771,6 +774,16 @@
   function materialNextPage(){
     const maxPage = Math.max(0, Math.ceil(materialTiles().length / MATERIAL_PAGE_SIZE) - 1);
     if (materialPage < maxPage){ materialPage++; render(); }
+  }
+  // Removes every remaining unused photo from the material tray in one go — everything already
+  // dragged out onto the workspace (isMaterial:false) is untouched. Saves clicking each leftover
+  // material tile individually once you're done picking from a batch.
+  function clearMaterial(){
+    const ids = materialTiles().map(t => t.id);
+    if (!ids.length) return;
+    if (!confirm(ids.length + ' verbleibende(s) Foto(s) im Material-Fach entfernen? Was schon auf der Arbeitsfläche liegt, bleibt unangetastet.')) return;
+    materialPage = 0;
+    deleteTiles(ids);
   }
   // Called after any drag that could have moved a material tile: promotes it to a normal
   // workspace tile the moment its center leaves the tray, and refills the freed slot.
@@ -1590,6 +1603,31 @@
       performUndo();
       return;
     }
+    // Cmd/Ctrl + D: duplicate the current selection (photo or text tiles) — lands the copy
+    // nudged slightly down-right so it's visibly distinct from the original, selected and ready
+    // to drag. Never fires while typing in a field (e.g. would otherwise fight the font input).
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd'){
+      if (isTypingInField()) return;
+      e.preventDefault();
+      duplicateSelection();
+      return;
+    }
+    // Cmd/Ctrl + C / V: copy the current selection to an in-app clipboard, paste it back as new
+    // tiles. Both bail out immediately while focus is in a real input/textarea/contenteditable
+    // (e.g. the font field, or a text tile being edited) so ordinary text copy/paste there is
+    // never hijacked.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c'){
+      if (isTypingInField() || !state.selectedIds.size) return;
+      e.preventDefault();
+      copySelection();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v'){
+      if (isTypingInField() || !tileClipboard) return;
+      e.preventDefault();
+      pasteClipboard();
+      return;
+    }
     // PageUp / PageDown: page through the material tray (previous/next 8)
     if (e.key === 'PageUp'){ e.preventDefault(); materialPrevPage(); return; }
     if (e.key === 'PageDown'){ e.preventDefault(); materialNextPage(); return; }
@@ -1846,6 +1884,58 @@
     state.tiles = state.tiles.filter(t => !idSet.has(t.id));
     idSet.forEach(id => state.selectedIds.delete(id));
     render();
+  }
+
+  // ---------- Duplicate / copy-paste (Cmd/Ctrl+D, Cmd/Ctrl+C, Cmd/Ctrl+V) ----------
+  let tileClipboard = null; // array of plain tile snapshots (source id/z dropped — fresh ones assigned on paste)
+
+  // Cmd+C/+V must stay ordinary text copy/paste while focus is in a real input (e.g. the font
+  // field) — never hijacked into duplicating a selected tile just because one happens to be
+  // selected at the same time.
+  function isTypingInField(){
+    const el = document.activeElement;
+    return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+  }
+
+  // Clones the given tiles onto the board (fresh ids, on top of the stack, nudged by `offset`
+  // board-units so a copy never sits exactly on top of its source) and selects the new copies.
+  // Shared by both Cmd+D (duplicate) and Cmd+V (paste). `cuts` is deep-copied — it's the one
+  // field on a tile that later gets mutated in place (push/pop while cutting), so sharing the
+  // array between a source tile and its clone would let editing one corrupt the other.
+  function insertTileClones(sourceTiles, offset){
+    pushUndo();
+    const clones = sourceTiles.map(src => ({
+      ...src,
+      id: 't' + (uid++), z: ++maxZ,
+      x: src.x + offset, y: src.y + offset,
+      isMaterial: false,
+      cuts: src.cuts ? src.cuts.map(c => ({ ...c })) : src.cuts
+    }));
+    state.tiles.push(...clones);
+    state.selectedIds = new Set(clones.map(t => t.id));
+    render();
+  }
+
+  function duplicateSelection(){
+    if (!state.selectedIds.size) return;
+    const sourceTiles = state.tiles.filter(t => state.selectedIds.has(t.id) && !t.isMaterial);
+    if (!sourceTiles.length) return;
+    insertTileClones(sourceTiles, 24);
+  }
+
+  function copySelection(){
+    if (!state.selectedIds.size) return;
+    const sourceTiles = state.tiles.filter(t => state.selectedIds.has(t.id) && !t.isMaterial);
+    if (!sourceTiles.length) return;
+    tileClipboard = sourceTiles.map(t => ({ ...t, cuts: t.cuts ? t.cuts.map(c => ({ ...c })) : t.cuts }));
+  }
+
+  function pasteClipboard(){
+    if (!tileClipboard || !tileClipboard.length) return;
+    insertTileClones(tileClipboard, 24);
+    // Nudge the stored clipboard positions along too, so repeatedly pressing Cmd+V steps each
+    // paste further out instead of stacking every paste at the exact same offset.
+    tileClipboard = tileClipboard.map(t => ({ ...t, x: t.x + 24, y: t.y + 24 }));
   }
 
   // click-and-drag on empty background = draw a selection box (marquee) and select every
