@@ -1745,6 +1745,13 @@
     // Typing into a text tile's contenteditable — its own keydown listener already stops
     // propagation, but bail out here too as a safety net (e.g. focus ending up elsewhere).
     if (editingTileId) return;
+    // Typing into any ordinary form field (font search, font size, letter spacing, export
+    // width, a save-dialog name field, ...) must behave like a normal text field — single-key
+    // shortcuts below (S = crop mode, P = cut mode, B = distress brush, Delete/Backspace =
+    // delete the selected tile, +/- = zoom, ...) would otherwise hijack ordinary typing, e.g.
+    // typing "s" while searching for a font name unexpectedly entering crop mode, or pressing
+    // Backspace to fix a typo instead deleting the whole selected tile.
+    if (isTypingInField()) return;
     // Any keyboard shortcut (H/V/R/S/Delete/...) between two clicks clearly means the user
     // is doing two separate, deliberate actions — not double-clicking to edit. Without this,
     // click tile -> press a shortcut -> click the same tile again shortly after (a common,
