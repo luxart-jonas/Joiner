@@ -445,10 +445,13 @@
         <button id="textAlignRightBtn" class="btn" title="Rechtsbündig">≡▶</button>
         <input type="number" id="textLetterSpacing" step="0.5" title="Zeichenabstand (px)">
         <input type="number" id="textLineHeight" min="0.5" max="4" step="0.05" title="Zeilenabstand">
-        <button id="textDistressBtn" class="btn" title="Verwitterungspinsel — Farbe abblättern lassen, damit sich der Text besser in den Hintergrund einfügt (B)">🖌️ Verwittern</button>
-        <input type="number" id="distressBrushSize" min="4" max="150" step="2" title="Pinselgröße" style="width:56px;">
-        <button id="distressResetBtn" class="btn" title="Verwitterung dieser Textkachel komplett zurücksetzen">↺ Verwitterung</button>
         <button id="textHideBtn" class="btn" title="Diese Textkachel ausblenden — bleibt gespeichert und erscheint nicht im Export, über „📝 Texte“ jederzeit wieder einblendbar">🚫 Ausblenden</button>
+      </div>
+
+      <div class="text-toolbar" id="distressToolbar" title="Eine Kachel (Foto oder Text) ist ausgewählt — Verwitterungspinsel lässt Farbe/Bild an den Übergängen abblättern, ohne Schatten an den abgeblätterten Stellen">
+        <button id="textDistressBtn" class="btn" title="Verwitterungspinsel — Farbe/Foto an den Kanten abblättern lassen, für weiche Übergänge ohne Schatten an diesen Stellen (B)">🖌️ Verwittern</button>
+        <input type="number" id="distressBrushSize" min="4" max="150" step="2" title="Pinselgröße" style="width:56px;">
+        <button id="distressResetBtn" class="btn" title="Verwitterung dieser Kachel komplett zurücksetzen">↺ Verwitterung</button>
       </div>
 
       <button id="loadBtn" class="btn">📁 Collage</button>
@@ -621,7 +624,7 @@
     }
     else if (dragMode === 'distress'){
       modeBadge.style.display = 'inline-flex';
-      modeBadge.textContent = '🖌️ Verwitterungspinsel — auf den Text malen · Größe ' + Math.round(brushSize) +
+      modeBadge.textContent = '🖌️ Verwitterungspinsel — auf die Kachel malen · Größe ' + Math.round(brushSize) +
         ' ([ / ] ändern) · Shift+Entf: diese Kachel zurücksetzen · B zum Beenden';
     }
     else modeBadge.style.display = 'none';
@@ -885,7 +888,16 @@
     }
     function refreshLiveMask(){
       const clipEl = el.querySelector('.tile-clip');
-      if (clipEl) applyDistressMask(tile, clipEl);
+      if (!clipEl) return;
+      applyDistressMask(tile, clipEl);
+      // Mirrors the same shadow-follows-mask switch-over render() does, so a photo tile's
+      // shadow stops showing through a hole the instant it's painted, not just once the drag
+      // ends and a full render() happens.
+      if (tile.type !== 'text'){
+        el.classList.add('shadow-follows-mask');
+        el.style.setProperty('--tile-drop-shadow', '0 0 0 0 rgba(0,0,0,0)');
+        clipEl.style.filter = dropShadowFilterValue(shadowIntensity);
+      }
     }
     function paintAt(ev){
       if (!pushedUndo){ pushUndo(); pushedUndo = true; }
@@ -912,6 +924,7 @@
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', up);
       updateTextToolbar();
+      updateDistressToolbar();
     }
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', up);
@@ -1155,9 +1168,28 @@
     const alpha = +(SHADOW_BASE_ALPHA * t).toFixed(3);
     return '0 ' + offsetY + 'px ' + blur + 'px rgba(0,0,0,' + alpha + ')';
   }
+  // Same scaling as shadowBoxShadowValue() above, but as a filter:drop-shadow() instead of a
+  // box-shadow — used only for photo tiles that have been painted with the distress brush (see
+  // the "shadow-follows-mask" logic in render()), since drop-shadow (unlike box-shadow) is
+  // computed from the element's actual rendered alpha, so it naturally respects the punched
+  // holes instead of showing a shadow straight through them.
+  function dropShadowFilterValue(intensity){
+    const t = Math.max(0, Math.min(100, intensity)) / 100;
+    if (t <= 0) return 'none';
+    const offsetY = +(SHADOW_BASE_OFFSET_Y * t).toFixed(2);
+    const blur = +(SHADOW_BASE_BLUR * t).toFixed(2);
+    const alpha = +(SHADOW_BASE_ALPHA * t).toFixed(3);
+    return 'drop-shadow(0 ' + offsetY + 'px ' + blur + 'px rgba(0,0,0,' + alpha + '))';
+  }
   function setShadowIntensity(v){
     shadowIntensity = Math.max(0, Math.min(100, Math.round(v)));
     board.style.setProperty('--photo-shadow-value', shadowBoxShadowValue(shadowIntensity));
+    // Tiles currently using the drop-shadow path (see render()) aren't reachable through the
+    // CSS custom property above (their shadow is an inline filter, not box-shadow), so update
+    // them directly here rather than forcing a full render() on every slider tick.
+    document.querySelectorAll('.tile.shadow-follows-mask .tile-clip').forEach(clipEl => {
+      clipEl.style.filter = dropShadowFilterValue(shadowIntensity);
+    });
     shadowIntensityInput.value = shadowIntensity;
     shadowIntensityValue.textContent = shadowIntensity + '%';
   }
@@ -1446,7 +1478,7 @@
       el.className = 'tile' + (tile.type === 'text' ? ' tile-text' : ' tile-photo') + (isSelected ? ' selected' : '')
         + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '')
         + (isSelected && dragMode === 'crop' ? ' crop-mode' : '')
-        + (isSelected && dragMode === 'distress' && tile.type === 'text' ? ' distress-mode' : '')
+        + (isSelected && dragMode === 'distress' ? ' distress-mode' : '')
         + (isCutting ? ' cut-mode' : '');
       el.style.left = tile.x + 'px';
       el.style.top = tile.y + 'px';
@@ -1494,7 +1526,6 @@
 
         mountPoint = buildCutLayers(tile, mountPoint, isCutting);
         mountPoint.appendChild(contentEl);
-        applyDistressMask(tile, tileClip);
       } else {
         const img = document.createElement('img');
         img.draggable = false;
@@ -1519,6 +1550,24 @@
         if (tile.broken){
           el.classList.add('broken');
           renderBrokenFill(el, tile);
+        }
+      }
+
+      // Verwittern/distress works on any tile type now (used to be text-only). A plain CSS
+      // box-shadow can't ever respect the mask's punched-out holes — it's purely geometric on
+      // the outer .tile box, blind to whatever its clipped/masked children actually show. So for
+      // a PHOTO tile that's actually been painted on, swap its shadow from that geometric layer
+      // to filter:drop-shadow() on the tile-clip itself — drop-shadow is computed from the
+      // element's real rendered alpha (i.e. AFTER masking), so it naturally casts no shadow at
+      // every spot that's been painted away, which is exactly the "kein Schatten an diesen
+      // Stellen" behaviour asked for. Text tiles keep their existing fixed shadow, untouched.
+      if (!tile.broken){
+        applyDistressMask(tile, tileClip);
+        const hasDistress = !!(tile.distressStrokes && tile.distressStrokes.length);
+        if (tile.type !== 'text' && hasDistress){
+          el.classList.add('shadow-follows-mask');
+          el.style.setProperty('--tile-drop-shadow', '0 0 0 0 rgba(0,0,0,0)');
+          tileClip.style.filter = dropShadowFilterValue(shadowIntensity);
         }
       }
 
@@ -1570,6 +1619,7 @@
     });
 
     updateTextToolbar();
+    updateDistressToolbar();
     updateBoardScale();
   }
 
@@ -1775,10 +1825,9 @@
     if (cls.contains('crop-handle')) { startEdgeCrop(e, tile, el, e.target.dataset.edge); return; }
 
     if (e.altKey || dragMode === 'rotate'){ startRotateGroup(e, tile); return; }
-    // Distress brush: only meaningful on text tiles — clicking a photo tile while the brush
-    // happens to still be "on" (selection changed away from any text tile) just moves it as
-    // usual instead of silently doing nothing.
-    if (dragMode === 'distress' && tile.type === 'text'){ startDistressPaint(e, tile, el); return; }
+    // Distress brush: works on any tile type now (text and photo) — flaking away paint/pixels
+    // at the edges/transitions, with no shadow left behind at the painted-away spots.
+    if (dragMode === 'distress'){ startDistressPaint(e, tile, el); return; }
     startDragGroup(e, tile);
   }
 
@@ -1909,7 +1958,7 @@
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && e.shiftKey){
         e.preventDefault();
-        const t = state.tiles.find(x => state.selectedIds.has(x.id) && x.type === 'text');
+        const t = state.tiles.find(x => state.selectedIds.has(x.id));
         if (t && t.distressStrokes && t.distressStrokes.length){
           pushUndo();
           t.distressStrokes = [];
@@ -1922,7 +1971,7 @@
         e.preventDefault();
         brushSize = e.key === '[' ? Math.max(4, brushSize - 4) : Math.min(150, brushSize + 4);
         updateModeBadge();
-        updateTextToolbar();
+        updateDistressToolbar();
         return;
       }
     }
@@ -2037,7 +2086,7 @@
           dragMode = 'move';
         } else if (state.selectedIds.size === 1){
           const t = state.tiles.find(x => x.id === [...state.selectedIds][0]);
-          if (t && t.type === 'text') dragMode = 'distress';
+          if (t) dragMode = 'distress';
         }
         updateModeBadge();
         render();
@@ -2399,7 +2448,7 @@
                          dirId: dirId != null ? dirId : null, relPath: relPath || null,
                          filename: file.name, naturalW: dims.w, naturalH: dims.h,
                          x:0, y:0, w:MATERIAL_SLOT, h:MATERIAL_SLOT, rot:0, z:0, broken:false,
-                         isMaterial: true });
+                         distressStrokes: [], isMaterial: true });
       } catch(err){ console.warn('Foto konnte nicht geladen werden', err); }
     }
     if (!newTiles.length) return;
@@ -2534,16 +2583,24 @@
   const textAlignRightBtn = document.getElementById('textAlignRightBtn');
   const textLetterSpacing = document.getElementById('textLetterSpacing');
   const textLineHeight = document.getElementById('textLineHeight');
+  const textHideBtn = document.getElementById('textHideBtn');
+
+  const distressToolbar = document.getElementById('distressToolbar');
   const textDistressBtn = document.getElementById('textDistressBtn');
   const distressBrushSize = document.getElementById('distressBrushSize');
   const distressResetBtn = document.getElementById('distressResetBtn');
-  const textHideBtn = document.getElementById('textHideBtn');
 
   function selectedTextTile(){
     const ids = [...state.selectedIds];
     if (ids.length !== 1) return null;
     const t = state.tiles.find(x => x.id === ids[0]);
     return (t && t.type === 'text') ? t : null;
+  }
+  // Distress/"Verwittern" now works on ANY single selected tile — photo or text — not just text.
+  function selectedSingleTile(){
+    const ids = [...state.selectedIds];
+    if (ids.length !== 1) return null;
+    return state.tiles.find(x => x.id === ids[0]) || null;
   }
   // For attributes that change the text's natural size (font/weight/style/spacing/content):
   // re-measure and reset any crop, since a crop window computed for the old shape no longer applies.
@@ -2577,13 +2634,21 @@
     textAlignRightBtn.classList.toggle('active', t.textAlign === 'right');
     textLetterSpacing.value = t.letterSpacing;
     textLineHeight.value = t.lineHeight;
-    textDistressBtn.classList.toggle('active', dragMode === 'distress');
-    distressBrushSize.value = Math.round(brushSize);
-    distressResetBtn.disabled = !(t.distressStrokes && t.distressStrokes.length);
     const favorited = isFontFavorited(t.fontFamily);
     const starBtn = document.getElementById('favFontStarBtn');
     starBtn.textContent = favorited ? '★' : '☆';
     starBtn.classList.toggle('active', favorited);
+  }
+  // Distress toolbar: separate from the text-only toolbar above, shown for ANY single selected
+  // tile (photo or text) — the brush itself has always been generic, only the UI/keyboard gating
+  // used to restrict it to text.
+  function updateDistressToolbar(){
+    const t = selectedSingleTile();
+    distressToolbar.style.display = t ? 'flex' : 'none';
+    if (!t) return;
+    textDistressBtn.classList.toggle('active', dragMode === 'distress');
+    distressBrushSize.value = Math.round(brushSize);
+    distressResetBtn.disabled = !(t.distressStrokes && t.distressStrokes.length);
   }
   textFontFamily.addEventListener('change', () => mutateSelectedTextResize(t => { t.fontFamily = textFontFamily.value; }));
 
@@ -2703,8 +2768,9 @@
   }));
 
   // ---------- Distress brush toolbar controls (mirror the B / [ / ] / Shift+Delete shortcuts) ----------
+  // Works on any single selected tile now — photo or text.
   textDistressBtn.addEventListener('click', () => {
-    const t = selectedTextTile();
+    const t = selectedSingleTile();
     if (!t) return;
     dragMode = dragMode === 'distress' ? 'move' : 'distress';
     updateModeBadge();
@@ -2717,7 +2783,7 @@
     updateModeBadge();
   });
   distressResetBtn.addEventListener('click', () => {
-    const t = selectedTextTile();
+    const t = selectedSingleTile();
     if (!t || !t.distressStrokes || !t.distressStrokes.length) return;
     pushUndo();
     t.distressStrokes = [];
@@ -3045,6 +3111,12 @@
           const sw = tile.w / tile.imgScale;
           const sh = tile.h / tile.imgScale;
           ctx.drawImage(img, sx, sy, sw, sh, 0, 0, iw, ih);
+          // Punch the same distress strokes into the exported photo pixels, same technique and
+          // coordinate convention as text tiles (tile-box-local units, just multiplied by RES).
+          // Since this happens right after the shadow-casting drawImage() above, destination-out
+          // erases the shadow pixels right along with the image content at every painted-away
+          // spot — no shadow left showing through the holes, matching the live view.
+          (tile.distressStrokes || []).forEach(s => stampDistressDab(ctx, s.x * RES, s.y * RES, s.r * RES));
         }
         ctx.restore();
       });
@@ -3204,7 +3276,8 @@
         textAlign: t.type === 'text' ? t.textAlign : undefined,
         letterSpacing: t.type === 'text' ? t.letterSpacing : undefined,
         lineHeight: t.type === 'text' ? t.lineHeight : undefined,
-        distressStrokes: t.type === 'text' ? (t.distressStrokes || []) : undefined,
+        // distress/"Verwittern" works on photo tiles too now — not text-only anymore
+        distressStrokes: t.distressStrokes || [],
         hidden: t.type === 'text' ? !!t.hidden : undefined
       }))
     });
@@ -3348,6 +3421,7 @@
         imgOffsetX: r.imgOffsetX != null ? r.imgOffsetX : null,
         imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : null,
         cuts: r.cuts || null,
+        distressStrokes: r.distressStrokes || [],
         isMaterial: !!r.isMaterial,
         x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
       });
@@ -4614,14 +4688,16 @@
             imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
             imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null,
             cuts: t.cuts || null,
-            isMaterial: !!t.isMaterial
+            isMaterial: !!t.isMaterial,
+            // distress/"Verwittern" works on photo tiles too now — not text-only anymore
+            distressStrokes: t.distressStrokes || []
           };
           if (t.type === 'text'){
             return Object.assign(base, {
               text: t.text, fontFamily: t.fontFamily, fontSize: t.fontSize, color: t.color,
               bold: !!t.bold, italic: !!t.italic, textAlign: t.textAlign,
               letterSpacing: t.letterSpacing, lineHeight: t.lineHeight,
-              distressStrokes: t.distressStrokes || [], hidden: !!t.hidden
+              hidden: !!t.hidden
             });
           }
           // photo tile: only the filename survives, as a hint for manual relinking — any
