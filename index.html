@@ -198,6 +198,25 @@
   }
   .fav-font-chip .fav-font-remove:hover{color:#e2a2a2;background:rgba(255,255,255,.08);}
 
+  /* ---------- Text layers popover (show/hide text tiles without losing work) ---------- */
+  .text-layers-wrap{position:relative;display:inline-flex;}
+  .text-layers-panel{
+    display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:200;
+    width:260px;max-height:320px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:10px;
+  }
+  .text-layers-panel.open{display:block;}
+  .text-layers-empty{font-size:12px;color:var(--text-dim);line-height:1.4;padding:4px 2px;}
+  .text-layer-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:7px 8px;border-radius:6px;font-size:12.5px;color:var(--text);
+  }
+  .text-layer-row:hover{background:var(--panel-2);}
+  .text-layer-row.hidden-row{opacity:0.55;}
+  .text-layer-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;cursor:pointer;}
+  .text-layer-row.hidden-row .text-layer-name{cursor:default;}
+  .text-layer-toggle{flex-shrink:0;padding:4px 8px;font-size:11.5px;white-space:nowrap;}
+
   /* ---------- Export popover ---------- */
   .export-wrap{position:relative;display:inline-flex;}
   .export-panel{
@@ -390,12 +409,20 @@
         <button id="textDistressBtn" class="btn" title="Verwitterungspinsel — Farbe abblättern lassen, damit sich der Text besser in den Hintergrund einfügt (B)">🖌️ Verwittern</button>
         <input type="number" id="distressBrushSize" min="4" max="150" step="2" title="Pinselgröße" style="width:56px;">
         <button id="distressResetBtn" class="btn" title="Verwitterung dieser Textkachel komplett zurücksetzen">↺ Verwitterung</button>
+        <button id="textHideBtn" class="btn" title="Diese Textkachel ausblenden — bleibt gespeichert und erscheint nicht im Export, über „📝 Texte“ jederzeit wieder einblendbar">🚫 Ausblenden</button>
       </div>
 
       <button id="loadBtn" class="btn">📁 Collage</button>
 
       <button id="addPhotosBtn" class="btn">＋ Fotos</button>
       <button id="addTextBtn" class="btn" title="Textkachel hinzufügen — verhält sich wie eine Bildkachel: verschieben, drehen, skalieren, zuschneiden, Ebenen">🔤 Text</button>
+      <div class="text-layers-wrap">
+        <button id="textLayersBtn" class="btn" title="Alle Textkacheln dieses Projekts anzeigen/ausblenden — ausgeblendete bleiben gespeichert und erscheinen nicht im Export, so bleibt keine Textvariante umsonst gestaltet">📝 Texte</button>
+        <div class="text-layers-panel" id="textLayersPanel">
+          <div class="text-layers-empty" id="textLayersEmpty">Noch keine Textkacheln in diesem Projekt.</div>
+          <div class="text-layers-list" id="textLayersList"></div>
+        </div>
+      </div>
       <input id="fileInput" type="file" accept="image/*" multiple hidden>
       <input id="relinkInput" type="file" accept="image/*" multiple hidden>
 
@@ -1186,7 +1213,7 @@
       imgScale: 1, imgOffsetX: 0, imgOffsetY: 0,
       naturalW: 10, naturalH: 10,
       isMaterial: false, broken: false, cuts: null,
-      distressStrokes: []
+      distressStrokes: [], hidden: false
     };
     const size = measureTextTile(tile);
     tile.naturalW = size.w; tile.naturalH = size.h;
@@ -1332,6 +1359,7 @@
 
     state.tiles.forEach(tile => {
       if (tile.isMaterial && !materialVisible.has(tile.id)) return; // waiting off-page, not shown right now
+      if (tile.hidden) return; // manually hidden via "📝 Texte" — kept in the project, just not shown/exported
       const isSelected = state.selectedIds.has(tile.id);
       const isCutting = dragMode === 'cut' && tile.id === cutTileId;
       const el = document.createElement('div');
@@ -2429,6 +2457,7 @@
   const textDistressBtn = document.getElementById('textDistressBtn');
   const distressBrushSize = document.getElementById('distressBrushSize');
   const distressResetBtn = document.getElementById('distressResetBtn');
+  const textHideBtn = document.getElementById('textHideBtn');
 
   function selectedTextTile(){
     const ids = [...state.selectedIds];
@@ -2614,6 +2643,82 @@
     t.distressStrokes = [];
     t._maskCacheKey = null;
     render();
+  });
+
+  // ---------- Show/hide text tiles without deleting them ----------
+  // Hiding a text tile keeps it fully intact in the project (font, position, distressing,
+  // everything) — it just stops showing up on the board and drops out of the export, so
+  // several text/typography attempts can be tried and compared side by side without losing
+  // any of the earlier ones (no need to redo the styling if an older version turns out to
+  // look better after all).
+  textHideBtn.addEventListener('click', () => {
+    const t = selectedTextTile();
+    if (!t) return;
+    pushUndo();
+    t.hidden = true;
+    state.selectedIds.delete(t.id); // it's no longer on the board, so it can't stay "selected"
+    render();
+  });
+
+  const textLayersBtn = document.getElementById('textLayersBtn');
+  const textLayersPanel = document.getElementById('textLayersPanel');
+  const textLayersList = document.getElementById('textLayersList');
+  const textLayersEmpty = document.getElementById('textLayersEmpty');
+
+  function textTilePreview(t){
+    const raw = (t.text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return '(leerer Text)';
+    return raw.length > 30 ? raw.slice(0, 30) + '…' : raw;
+  }
+  // Lists EVERY text tile in the project (visible and hidden alike) with a per-tile
+  // show/hide toggle — this is the only way back for a tile that's currently hidden, since a
+  // hidden tile isn't rendered on the board at all and so can't be clicked to reselect it.
+  function renderTextLayersPanel(){
+    const texts = state.tiles.filter(t => t.type === 'text' && !t.isMaterial);
+    textLayersList.innerHTML = '';
+    textLayersEmpty.style.display = texts.length ? 'none' : 'block';
+    textLayersBtn.textContent = '📝 Texte' + (texts.length ? ' (' + texts.length + ')' : '');
+    texts.sort((a,b) => b.z - a.z).forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'text-layer-row' + (t.hidden ? ' hidden-row' : '');
+
+      const name = document.createElement('span');
+      name.className = 'text-layer-name';
+      name.textContent = textTilePreview(t);
+      name.title = t.hidden ? textTilePreview(t) : 'Klicken zum Auswählen';
+      if (!t.hidden){
+        name.addEventListener('click', () => {
+          state.selectedIds = new Set([t.id]);
+          render();
+        });
+      }
+      row.appendChild(name);
+
+      const toggle = document.createElement('button');
+      toggle.className = 'text-layer-toggle btn btn-ghost';
+      toggle.textContent = t.hidden ? '👁 Einblenden' : '🚫 Ausblenden';
+      toggle.title = t.hidden ? 'Diese Textkachel wieder anzeigen' : 'Diese Textkachel ausblenden (bleibt gespeichert)';
+      toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        pushUndo();
+        t.hidden = !t.hidden;
+        if (t.hidden) state.selectedIds.delete(t.id);
+        render();
+        renderTextLayersPanel();
+      });
+      row.appendChild(toggle);
+
+      textLayersList.appendChild(row);
+    });
+  }
+  textLayersBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    renderTextLayersPanel();
+    textLayersPanel.classList.toggle('open');
+  });
+  textLayersPanel.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', e => {
+    if (!textLayersPanel.contains(e.target) && e.target !== textLayersBtn) textLayersPanel.classList.remove('open');
   });
 
   fileInput.addEventListener('change', e => {
@@ -2817,7 +2922,7 @@
         ctx.fillRect(0,0,canvas.width,canvas.height);
       }
 
-      const ordered = state.tiles.filter(t => !t.isMaterial).sort((a,b) => a.z - b.z);
+      const ordered = state.tiles.filter(t => !t.isMaterial && !t.hidden).sort((a,b) => a.z - b.z);
       const results = await Promise.allSettled(ordered.map(t => {
         if (t.type === 'text') return Promise.resolve({ isText: true }); // no image to preload
         return new Promise((resolve,reject) => {
@@ -2861,10 +2966,11 @@
         ctx.restore();
       });
 
+      const exportFilenameBase = await nextExportFilenameBase();
       canvas.toBlob(blob => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'joiner-collage.png';
+        a.download = exportFilenameBase + '.png';
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -2906,6 +3012,38 @@
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
+  }
+
+  // ---------- Export filename (matches the project name, auto-numbered like "sabine am
+  // tisch", "sabine am tisch 02", "sabine am tisch 03", ...) ----------
+  function sanitizeFilenamePart(name){
+    // Strip characters that are invalid in filenames on Windows (the strictest common case —
+    // macOS itself only really objects to ':' and '/', but keeping exports portable is worth it).
+    return (name || '').replace(/[\\/:*?"<>|]/g, '').trim();
+  }
+  // Each project gets its own running export counter, persisted in the 'settings' store keyed
+  // by project id (so it survives across sessions and reloads, same as favoriteFonts above).
+  // The FIRST export of a project uses the plain project name with no number; every export
+  // after that appends a zero-padded, incrementing number — exactly the "sabine am tisch" /
+  // "sabine am tisch 02" pattern asked for. An unsaved project (no id yet) has nowhere
+  // meaningful to persist a counter, so it just always gets the plain name until it's saved.
+  async function nextExportFilenameBase(){
+    const base = sanitizeFilenamePart(state.currentProjectName) || 'Joiner-Collage';
+    if (!state.currentProjectId) return base;
+    const db = await openDB();
+    const tx = db.transaction('settings', 'readwrite');
+    const store = tx.objectStore('settings');
+    const key = 'exportCount:' + state.currentProjectId;
+    const rec = await new Promise((resolve, reject) => {
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const nextCount = (rec && rec.count ? rec.count : 0) + 1;
+    store.put({ key, count: nextCount });
+    await txDone(tx);
+    db.close();
+    return nextCount <= 1 ? base : (base + ' ' + String(nextCount).padStart(2, '0'));
   }
 
   // ---------- Favorite fonts (a little "folder" of go-to fonts for the text tool) ----------
@@ -2983,7 +3121,8 @@
         textAlign: t.type === 'text' ? t.textAlign : undefined,
         letterSpacing: t.type === 'text' ? t.letterSpacing : undefined,
         lineHeight: t.type === 'text' ? t.lineHeight : undefined,
-        distressStrokes: t.type === 'text' ? (t.distressStrokes || []) : undefined
+        distressStrokes: t.type === 'text' ? (t.distressStrokes || []) : undefined,
+        hidden: t.type === 'text' ? !!t.hidden : undefined
       }))
     });
     await txDone(tx);
@@ -3093,6 +3232,7 @@
           imgOffsetY: r.imgOffsetY != null ? r.imgOffsetY : 0,
           cuts: r.cuts || null,
           distressStrokes: r.distressStrokes || [],
+          hidden: !!r.hidden,
           isMaterial: !!r.isMaterial,
           x: r.x, y: r.y, w: r.w, h: r.h, rot: r.rot, z: r.z
         });
