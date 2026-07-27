@@ -84,9 +84,18 @@
   /* ---------- Tiles ---------- */
   .tile{
     position:absolute;box-sizing:border-box;
-    box-shadow:0 4px 14px rgba(0,0,0,.5);
+    /* a custom property (rather than a hardcoded shadow value) so the "🌗 Schatten"
+       toggle can drop just this one layer per-photo-tile below, without having to
+       duplicate every combined box-shadow rule (selected/rotate/crop/cut/distress) */
+    --tile-drop-shadow:0 4px 14px rgba(0,0,0,.5);
+    box-shadow:var(--tile-drop-shadow);
     cursor:grab;touch-action:none;user-select:none;
   }
+  /* NOT "none" — box-shadow can't mix a bare "none" into a comma-separated shadow list (it's
+     only valid as the whole property value), which would silently invalidate the selected/
+     rotate/crop/cut ring layers combined with it below. A fully transparent, zero-size shadow
+     is syntactically just another layer, so it combines fine while staying invisible. */
+  #board.shadows-off .tile-photo{ --tile-drop-shadow:0 0 0 0 rgba(0,0,0,0); }
   .tile:active{cursor:grabbing;}
   /* Clips only the tile's own content (image/text/cut-layers) — handles (delete, rotate,
      resize, crop) live as unclipped children of .tile itself so they stay fully visible and
@@ -106,11 +115,11 @@
     outline:2px dashed rgba(212,175,55,.75);outline-offset:2px;cursor:text;
     user-select:text;-webkit-user-select:text;white-space:pre-wrap;
   }
-  .tile.selected{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px var(--gold);}
-  .tile.rotate-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #6fc3e8;}
-  .tile.crop-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #7ed9a8;}
-  .tile.cut-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #ff9d5c;}
-  .tile.distress-mode{box-shadow:0 4px 14px rgba(0,0,0,.5), 0 0 0 2px #c9a15a; cursor:crosshair;}
+  .tile.selected{box-shadow:var(--tile-drop-shadow), 0 0 0 2px var(--gold);}
+  .tile.rotate-mode{box-shadow:var(--tile-drop-shadow), 0 0 0 2px #6fc3e8;}
+  .tile.crop-mode{box-shadow:var(--tile-drop-shadow), 0 0 0 2px #7ed9a8;}
+  .tile.cut-mode{box-shadow:var(--tile-drop-shadow), 0 0 0 2px #ff9d5c;}
+  .tile.distress-mode{box-shadow:var(--tile-drop-shadow), 0 0 0 2px #c9a15a; cursor:crosshair;}
   .tile.distress-mode .text-content{cursor:crosshair;}
   .cut-layer{position:absolute;left:0;top:0;width:100%;height:100%;}
   .handle.cut-point-handle{margin-left:-14px;margin-top:-14px;background:#ff9d5c;color:#3a1f08;font-size:12px;cursor:grab;}
@@ -279,14 +288,18 @@
   .modal-body{overflow-y:auto;padding:8px;}
   .modal-empty{color:var(--text-dim);font-size:13.5px;text-align:center;padding:30px 10px;}
   .project-row{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    display:flex;flex-direction:column;align-items:stretch;gap:8px;
     padding:12px 10px;border-radius:6px;
   }
   .project-row:hover{background:var(--panel-2);}
   .project-info{min-width:0;}
   .project-name{color:var(--text);font-size:14px;font-weight:500;white-space:normal;overflow-wrap:break-word;}
   .project-meta{color:var(--text-dim);font-size:12px;margin-top:2px;}
-  .project-actions{display:flex;gap:6px;flex-shrink:0;}
+  /* stacked below the info (rather than beside it) and free to wrap onto more than one
+     line — with five buttons per row (Laden/Umbenennen/Duplizieren/Verschieben/Löschen)
+     a single side-by-side row no longer reliably fits without overlapping the text next
+     to it, especially in the narrower modal width */
+  .project-actions{display:flex;gap:6px;flex-wrap:wrap;}
   .project-actions .btn{padding:7px 11px;font-size:12.5px;}
 
   /* ---------- "Move to bin" popover — alternative to drag&drop for long project lists ---------- */
@@ -448,6 +461,8 @@
         <input type="color" id="bgColorInput" value="#b8b8b8">
         <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
       </div>
+
+      <button id="shadowToggleBtn" class="btn" title="Schlagschatten unter den Fotos ein-/ausschalten — gilt live und im Export, wird mit der Collage gespeichert">🌗 Schatten aus</button>
 
       <div class="export-wrap">
         <button id="exportBtn" class="btn">Exportieren ▾</button>
@@ -1056,7 +1071,7 @@
   function pushUndo(){
     undoStack.push({
       tiles: state.tiles.map(t => ({ ...t })),
-      boardColor
+      boardColor, shadowsEnabled
     });
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   }
@@ -1066,6 +1081,7 @@
     state.tiles = snap.tiles.map(t => ({ ...t }));
     state.selectedIds = new Set();
     if (snap.boardColor) setBoardColor(snap.boardColor);
+    if (snap.shadowsEnabled !== undefined) setShadowsEnabled(snap.shadowsEnabled);
     maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
     dragMode = 'move';
     updateModeBadge();
@@ -1104,6 +1120,25 @@
   } else {
     eyedropperBtn.style.display = 'none'; // not supported in this browser (e.g. Safari/Firefox)
   }
+
+  // ---------- Photo drop-shadow toggle (live + export, saved with the project) ----------
+  // Applies only to photo tiles — text never gets this shadow (removed per an earlier
+  // request), so there's nothing to toggle there.
+  let shadowsEnabled = true;
+  const shadowToggleBtn = document.getElementById('shadowToggleBtn');
+  function updateShadowToggleBtn(){
+    shadowToggleBtn.textContent = shadowsEnabled ? '🌗 Schatten aus' : '🌓 Schatten an';
+    shadowToggleBtn.title = shadowsEnabled
+      ? 'Schlagschatten unter den Fotos ausschalten (live und im Export)'
+      : 'Schlagschatten unter den Fotos wieder einschalten (live und im Export)';
+  }
+  function setShadowsEnabled(v){
+    shadowsEnabled = !!v;
+    board.classList.toggle('shadows-off', !shadowsEnabled);
+    updateShadowToggleBtn();
+  }
+  setShadowsEnabled(true);
+  shadowToggleBtn.addEventListener('click', () => setShadowsEnabled(!shadowsEnabled));
 
   // Bounding box of only the placed (non-material) tiles — used for export, so the material
   // tray never shows up as blank space in the exported image.
@@ -1377,7 +1412,7 @@
       const isSelected = state.selectedIds.has(tile.id);
       const isCutting = dragMode === 'cut' && tile.id === cutTileId;
       const el = document.createElement('div');
-      el.className = 'tile' + (isSelected ? ' selected' : '')
+      el.className = 'tile' + (tile.type === 'text' ? ' tile-text' : ' tile-photo') + (isSelected ? ' selected' : '')
         + (isSelected && dragMode === 'rotate' ? ' rotate-mode' : '')
         + (isSelected && dragMode === 'crop' ? ' crop-mode' : '')
         + (isSelected && dragMode === 'distress' && tile.type === 'text' ? ' distress-mode' : '')
@@ -2963,9 +2998,11 @@
           drawTextTileToCanvas(ctx, tile, RES);
         } else {
           const img = results[i].value;
-          ctx.shadowColor = 'rgba(0,0,0,0.5)';
-          ctx.shadowBlur = 10 * RES;
-          ctx.shadowOffsetY = 3 * RES;
+          if (shadowsEnabled){
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 10 * RES;
+            ctx.shadowOffsetY = 3 * RES;
+          }
 
           const iw = tile.w * RES, ih = tile.h * RES;
           ensureCropDefaults(tile);
@@ -3109,7 +3146,7 @@
     const db = await openDB();
     const tx = db.transaction('projects', 'readwrite');
     tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor,
+      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor, shadowsEnabled,
       // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
       // handle when available, otherwise just the filename), never a copy of the pixels.
       // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
@@ -3184,7 +3221,7 @@
     const tx = db.transaction('projects', 'readwrite');
     const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
     tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: DEFAULT_BOARD_COLOR,
+      id, name, folder: folder || '', savedAt: Date.now(), color: DEFAULT_BOARD_COLOR, shadowsEnabled: true,
       dirHandles: dirHandles || [], tiles
     });
     await txDone(tx);
@@ -3295,6 +3332,7 @@
     dragMode = 'move';
     materialPage = 0;
     if (record.color) setBoardColor(record.color);
+    setShadowsEnabled(record.shadowsEnabled !== undefined ? record.shadowsEnabled : true);
     state.currentProjectId = record.id;
     state.currentProjectName = record.name;
     state.currentProjectFolder = record.folder || '';
@@ -3997,6 +4035,7 @@
     materialPage = 0;
     updateModeBadge();
     setBoardColor(DEFAULT_BOARD_COLOR);
+    setShadowsEnabled(true);
 
     // save it right away as a real (still empty) project, so it shows up in the list immediately
     const newId = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
@@ -4533,6 +4572,7 @@
       app: 'joiner', kind: 'project-data-only', version: 1, exportedAt: Date.now(),
       projects: records.map(p => ({
         name: p.name, folder: p.folder || '', savedAt: p.savedAt || 0, color: p.color || null,
+        shadowsEnabled: p.shadowsEnabled !== undefined ? !!p.shadowsEnabled : true,
         tiles: (p.tiles || []).map(t => {
           const base = {
             id: t.id, type: t.type === 'text' ? 'text' : 'image',
@@ -4619,7 +4659,9 @@
         const tx = db.transaction('projects', 'readwrite');
         tx.objectStore('projects').put({
           id, name: p.name || 'Importiertes Projekt', folder: p.folder || '',
-          savedAt: p.savedAt || Date.now(), color: p.color || null, dirHandles: [], tiles
+          savedAt: p.savedAt || Date.now(), color: p.color || null,
+          shadowsEnabled: p.shadowsEnabled !== undefined ? !!p.shadowsEnabled : true,
+          dirHandles: [], tiles
         });
         await txDone(tx);
         projectCount++;
