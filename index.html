@@ -84,18 +84,21 @@
   /* ---------- Tiles ---------- */
   .tile{
     position:absolute;box-sizing:border-box;
-    /* a custom property (rather than a hardcoded shadow value) so the "🌗 Schatten"
-       toggle can drop just this one layer per-photo-tile below, without having to
+    /* a custom property (rather than a hardcoded shadow value) so the shadow-intensity
+       slider can drop just this one layer per-photo-tile below, without having to
        duplicate every combined box-shadow rule (selected/rotate/crop/cut/distress) */
     --tile-drop-shadow:0 4px 14px rgba(0,0,0,.5);
     box-shadow:var(--tile-drop-shadow);
     cursor:grab;touch-action:none;user-select:none;
   }
-  /* NOT "none" — box-shadow can't mix a bare "none" into a comma-separated shadow list (it's
-     only valid as the whole property value), which would silently invalidate the selected/
-     rotate/crop/cut ring layers combined with it below. A fully transparent, zero-size shadow
-     is syntactically just another layer, so it combines fine while staying invisible. */
-  #board.shadows-off .tile-photo{ --tile-drop-shadow:0 0 0 0 rgba(0,0,0,0); }
+  /* Photo tiles pick up whatever the slider currently computed (JS keeps --photo-shadow-value
+     up to date on #board, including a syntactically-valid-but-invisible value at 0% — see the
+     shadowBoxShadowValue() comment in JS for why a bare "none" can't be used here: box-shadow
+     can't mix a bare "none" into a comma-separated list, which would silently invalidate the
+     selected/rotate/crop/cut ring layers combined with it below). Falls back to the full default
+     shadow if the variable is ever unset. Text tiles never reference this — they keep the
+     default --tile-drop-shadow from .tile above, unaffected by the slider. */
+  .tile-photo{ --tile-drop-shadow:var(--photo-shadow-value, 0 4px 14px rgba(0,0,0,.5)); }
   .tile:active{cursor:grabbing;}
   /* Clips only the tile's own content (image/text/cut-layers) — handles (delete, rotate,
      resize, crop) live as unclipped children of .tile itself so they stay fully visible and
@@ -138,6 +141,16 @@
   }
 
   .color-control{display:flex;align-items:center;gap:6px;}
+  .shadow-control{
+    display:flex;align-items:center;gap:6px;background:var(--panel-2);
+    border-radius:6px;padding:6px 10px;
+  }
+  .shadow-control-icon{font-size:14px;line-height:1;}
+  .shadow-control input[type=range]{width:90px;accent-color:var(--gold);cursor:pointer;}
+  .shadow-control-value{
+    font-size:12px;font-weight:600;color:var(--text-dim);min-width:34px;text-align:right;
+    font-variant-numeric:tabular-nums;
+  }
   .text-toolbar{display:none;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;background:var(--panel-2);flex-wrap:wrap;}
   .text-toolbar select, .text-toolbar input[type=number], .text-toolbar input[type=text]{
     appearance:none;background:var(--panel);border:1px solid var(--border);border-radius:5px;
@@ -462,7 +475,11 @@
         <button id="eyedropperBtn" class="btn" title="Farbe mit Pipette vom Bildschirm aufnehmen">💧</button>
       </div>
 
-      <button id="shadowToggleBtn" class="btn" title="Schlagschatten unter den Fotos ein-/ausschalten — gilt live und im Export, wird mit der Collage gespeichert">🌗 Schatten aus</button>
+      <div class="shadow-control" title="Stärke des Schlagschattens unter den Fotos — 100% = normal, 0% = aus. Gilt live und im Export, wird mit der Collage gespeichert.">
+        <span class="shadow-control-icon">🌗</span>
+        <input type="range" id="shadowIntensityInput" min="0" max="100" step="1" value="100">
+        <span class="shadow-control-value" id="shadowIntensityValue">100%</span>
+      </div>
 
       <div class="export-wrap">
         <button id="exportBtn" class="btn">Exportieren ▾</button>
@@ -1071,7 +1088,7 @@
   function pushUndo(){
     undoStack.push({
       tiles: state.tiles.map(t => ({ ...t })),
-      boardColor, shadowsEnabled
+      boardColor, shadowIntensity
     });
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   }
@@ -1081,7 +1098,7 @@
     state.tiles = snap.tiles.map(t => ({ ...t }));
     state.selectedIds = new Set();
     if (snap.boardColor) setBoardColor(snap.boardColor);
-    if (snap.shadowsEnabled !== undefined) setShadowsEnabled(snap.shadowsEnabled);
+    if (snap.shadowIntensity !== undefined) setShadowIntensity(snap.shadowIntensity);
     maxZ = state.tiles.reduce((m,t) => Math.max(m, t.z), 0);
     dragMode = 'move';
     updateModeBadge();
@@ -1121,24 +1138,38 @@
     eyedropperBtn.style.display = 'none'; // not supported in this browser (e.g. Safari/Firefox)
   }
 
-  // ---------- Photo drop-shadow toggle (live + export, saved with the project) ----------
+  // ---------- Photo drop-shadow intensity slider (live + export, saved with the project) ----------
   // Applies only to photo tiles — text never gets this shadow (removed per an earlier
-  // request), so there's nothing to toggle there.
-  let shadowsEnabled = true;
-  const shadowToggleBtn = document.getElementById('shadowToggleBtn');
-  function updateShadowToggleBtn(){
-    shadowToggleBtn.textContent = shadowsEnabled ? '🌗 Schatten aus' : '🌓 Schatten an';
-    shadowToggleBtn.title = shadowsEnabled
-      ? 'Schlagschatten unter den Fotos ausschalten (live und im Export)'
-      : 'Schlagschatten unter den Fotos wieder einschalten (live und im Export)';
+  // request), so there's nothing to adjust there. 100 = the original fixed shadow
+  // (0 4px 14px rgba(0,0,0,.5)), 0 = fully off; everything in between scales the offset,
+  // blur AND alpha together so it reads as the shadow smoothly shrinking away, not just fading.
+  let shadowIntensity = 100;
+  const shadowIntensityInput = document.getElementById('shadowIntensityInput');
+  const shadowIntensityValue = document.getElementById('shadowIntensityValue');
+  const SHADOW_BASE_OFFSET_Y = 4, SHADOW_BASE_BLUR = 14, SHADOW_BASE_ALPHA = 0.5;
+  function shadowBoxShadowValue(intensity){
+    const t = Math.max(0, Math.min(100, intensity)) / 100;
+    if (t <= 0) return '0 0 0 0 rgba(0,0,0,0)'; // see the CSS comment above .tile-photo for why not "none"
+    const offsetY = +(SHADOW_BASE_OFFSET_Y * t).toFixed(2);
+    const blur = +(SHADOW_BASE_BLUR * t).toFixed(2);
+    const alpha = +(SHADOW_BASE_ALPHA * t).toFixed(3);
+    return '0 ' + offsetY + 'px ' + blur + 'px rgba(0,0,0,' + alpha + ')';
   }
-  function setShadowsEnabled(v){
-    shadowsEnabled = !!v;
-    board.classList.toggle('shadows-off', !shadowsEnabled);
-    updateShadowToggleBtn();
+  function setShadowIntensity(v){
+    shadowIntensity = Math.max(0, Math.min(100, Math.round(v)));
+    board.style.setProperty('--photo-shadow-value', shadowBoxShadowValue(shadowIntensity));
+    shadowIntensityInput.value = shadowIntensity;
+    shadowIntensityValue.textContent = shadowIntensity + '%';
   }
-  setShadowsEnabled(true);
-  shadowToggleBtn.addEventListener('click', () => setShadowsEnabled(!shadowsEnabled));
+  setShadowIntensity(100);
+  shadowIntensityInput.addEventListener('input', () => setShadowIntensity(parseInt(shadowIntensityInput.value, 10)));
+  // Backward-compat: old saved projects/backups stored a plain boolean "shadowsEnabled"
+  // instead of a 0-100 intensity — true/false maps to 100/0.
+  function shadowIntensityFromRecord(record){
+    if (record && record.shadowIntensity !== undefined && record.shadowIntensity !== null) return record.shadowIntensity;
+    if (record && record.shadowsEnabled !== undefined) return record.shadowsEnabled ? 100 : 0;
+    return 100;
+  }
 
   // Bounding box of only the placed (non-material) tiles — used for export, so the material
   // tray never shows up as blank space in the exported image.
@@ -2998,10 +3029,11 @@
           drawTextTileToCanvas(ctx, tile, RES);
         } else {
           const img = results[i].value;
-          if (shadowsEnabled){
-            ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 10 * RES;
-            ctx.shadowOffsetY = 3 * RES;
+          if (shadowIntensity > 0){
+            const t = shadowIntensity / 100;
+            ctx.shadowColor = 'rgba(0,0,0,' + (0.5 * t) + ')';
+            ctx.shadowBlur = 10 * t * RES;
+            ctx.shadowOffsetY = 3 * t * RES;
           }
 
           const iw = tile.w * RES, ih = tile.h * RES;
@@ -3146,7 +3178,7 @@
     const db = await openDB();
     const tx = db.transaction('projects', 'readwrite');
     tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor, shadowsEnabled,
+      id, name, folder: folder || '', savedAt: Date.now(), color: boardColor, shadowIntensity,
       // lean save — like Premiere/Resolve, we store a LINK to the photo (its File System
       // handle when available, otherwise just the filename), never a copy of the pixels.
       // Keeps the database small; use "🔗 Verknüpfen" if a link can't auto-reconnect later.
@@ -3221,7 +3253,7 @@
     const tx = db.transaction('projects', 'readwrite');
     const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
     tx.objectStore('projects').put({
-      id, name, folder: folder || '', savedAt: Date.now(), color: DEFAULT_BOARD_COLOR, shadowsEnabled: true,
+      id, name, folder: folder || '', savedAt: Date.now(), color: DEFAULT_BOARD_COLOR, shadowIntensity: 100,
       dirHandles: dirHandles || [], tiles
     });
     await txDone(tx);
@@ -3332,7 +3364,7 @@
     dragMode = 'move';
     materialPage = 0;
     if (record.color) setBoardColor(record.color);
-    setShadowsEnabled(record.shadowsEnabled !== undefined ? record.shadowsEnabled : true);
+    setShadowIntensity(shadowIntensityFromRecord(record));
     state.currentProjectId = record.id;
     state.currentProjectName = record.name;
     state.currentProjectFolder = record.folder || '';
@@ -4035,7 +4067,7 @@
     materialPage = 0;
     updateModeBadge();
     setBoardColor(DEFAULT_BOARD_COLOR);
-    setShadowsEnabled(true);
+    setShadowIntensity(100);
 
     // save it right away as a real (still empty) project, so it shows up in the list immediately
     const newId = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
@@ -4572,7 +4604,7 @@
       app: 'joiner', kind: 'project-data-only', version: 1, exportedAt: Date.now(),
       projects: records.map(p => ({
         name: p.name, folder: p.folder || '', savedAt: p.savedAt || 0, color: p.color || null,
-        shadowsEnabled: p.shadowsEnabled !== undefined ? !!p.shadowsEnabled : true,
+        shadowIntensity: shadowIntensityFromRecord(p),
         tiles: (p.tiles || []).map(t => {
           const base = {
             id: t.id, type: t.type === 'text' ? 'text' : 'image',
@@ -4660,7 +4692,7 @@
         tx.objectStore('projects').put({
           id, name: p.name || 'Importiertes Projekt', folder: p.folder || '',
           savedAt: p.savedAt || Date.now(), color: p.color || null,
-          shadowsEnabled: p.shadowsEnabled !== undefined ? !!p.shadowsEnabled : true,
+          shadowIntensity: shadowIntensityFromRecord(p),
           dirHandles: [], tiles
         });
         await txDone(tx);
