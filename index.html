@@ -289,6 +289,19 @@
   .project-actions{display:flex;gap:6px;flex-shrink:0;}
   .project-actions .btn{padding:7px 11px;font-size:12.5px;}
 
+  /* ---------- "Move to bin" popover — alternative to drag&drop for long project lists ---------- */
+  .move-to-bin-menu{
+    display:none;position:fixed;z-index:1100;
+    width:230px;max-height:280px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);
+    border-radius:8px;box-shadow:0 20px 50px rgba(0,0,0,.5);padding:8px;
+  }
+  .move-to-bin-menu.open{display:block;}
+  .move-to-bin-title{font-size:11.5px;color:var(--text-dim);padding:4px 6px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;overflow-wrap:break-word;}
+  .move-to-bin-option{padding:8px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);}
+  .move-to-bin-option:hover{background:var(--panel-2);}
+  .move-to-bin-option.current{color:var(--gold-soft);font-weight:600;}
+  .move-to-bin-empty{font-size:12px;color:var(--text-dim);line-height:1.4;padding:6px 2px;}
+
   /* ---------- Media panel: bins + drag/drop tree ---------- */
   .modal-media{width:min(560px, 100%);}
   .modal-small{width:min(320px, 100%);}
@@ -3567,6 +3580,69 @@
   let draggedBinId = null;
   const selectedProjectIds = new Set(); // checked in the tree, for bulk relink
 
+  // ---------- "Move to bin" popover ----------
+  // Dragging a project onto a bin only works while both are on screen at once — once the
+  // project list gets long, the bin you want can scroll out of view before you get there.
+  // This is a one-click alternative that reaches any bin regardless of list length: a small
+  // menu (built once, repositioned/repopulated per click) listing every bin plus "Ohne Bin".
+  const moveToBinMenu = document.createElement('div');
+  moveToBinMenu.className = 'move-to-bin-menu';
+  document.body.appendChild(moveToBinMenu);
+
+  function closeMoveToBinMenu(){
+    moveToBinMenu.classList.remove('open');
+  }
+  document.addEventListener('click', e => {
+    if (!moveToBinMenu.contains(e.target)) closeMoveToBinMenu();
+  });
+  // The menu is position:fixed and anchored to a button at the moment it opens — if the list
+  // (or the page) scrolls afterwards, that anchor point is stale, so just close it rather than
+  // leave it floating over the wrong row.
+  document.addEventListener('scroll', closeMoveToBinMenu, true);
+
+  async function openMoveToBinMenu(anchorBtn, project){
+    const bins = await listBins();
+    moveToBinMenu.innerHTML = '';
+
+    const title = document.createElement('div');
+    title.className = 'move-to-bin-title';
+    title.textContent = '„' + project.name + '“ verschieben nach:';
+    moveToBinMenu.appendChild(title);
+
+    const addOption = (label, folderValue) => {
+      const opt = document.createElement('div');
+      opt.className = 'move-to-bin-option' + (project.folder === folderValue ? ' current' : '');
+      opt.textContent = label;
+      opt.addEventListener('click', async () => {
+        if (project.folder !== folderValue){
+          if (folderValue) await ensureBinExists(folderValue);
+          await updateProjectFolder(project.id, folderValue);
+          if (state.currentProjectId === project.id){
+            state.currentProjectFolder = folderValue;
+            updateCurrentProjectLabel();
+          }
+        }
+        closeMoveToBinMenu();
+        openLoadModal();
+      });
+      moveToBinMenu.appendChild(opt);
+    };
+
+    addOption('— Ohne Bin —', '');
+    bins.forEach(b => addOption('📁 ' + b.name, b.name));
+    if (!bins.length){
+      const hint = document.createElement('div');
+      hint.className = 'move-to-bin-empty';
+      hint.textContent = 'Noch keine Bins — lege oben mit „+ Bin“ eine Kategorie an.';
+      moveToBinMenu.appendChild(hint);
+    }
+
+    const rect = anchorBtn.getBoundingClientRect();
+    moveToBinMenu.style.top = Math.round(Math.min(rect.bottom + 6, window.innerHeight - 60)) + 'px';
+    moveToBinMenu.style.left = Math.round(Math.min(rect.left, window.innerWidth - 240)) + 'px';
+    moveToBinMenu.classList.add('open');
+  }
+
   function buildProjectRow(p){
     const row = document.createElement('div');
     row.className = 'project-row';
@@ -3657,6 +3733,17 @@
       openLoadModal();
     });
 
+    // Alternative to dragging a project onto a bin — the drag target can scroll out of view
+    // in a long list, so this reaches every bin in one click regardless of list length.
+    const moveBtnEl = document.createElement('button');
+    moveBtnEl.className = 'btn';
+    moveBtnEl.textContent = '🗂️ Verschieben';
+    moveBtnEl.title = 'In einen anderen Bin verschieben — praktisch, wenn Ziehen bei einer langen Liste nicht mehr bis zum Ziel-Bin reicht';
+    moveBtnEl.addEventListener('click', async e => {
+      e.stopPropagation();
+      await openMoveToBinMenu(moveBtnEl, p);
+    });
+
     const delBtnEl = document.createElement('button');
     delBtnEl.className = 'btn btn-ghost';
     delBtnEl.textContent = 'Löschen';
@@ -3675,6 +3762,7 @@
     actions.appendChild(loadBtnEl);
     actions.appendChild(renameBtnEl);
     actions.appendChild(dupBtnEl);
+    actions.appendChild(moveBtnEl);
     actions.appendChild(delBtnEl);
     row.appendChild(info);
     row.appendChild(actions);
