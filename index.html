@@ -483,6 +483,7 @@
       <button id="relinkBtn" class="btn" title="Fehlende Bilder der aktuell offenen Collage wiederfinden — wähle die Originaldateien, auch aus anderen Ordnern; sie werden per Dateiname zugeordnet">🔗 Verknüpfen (offene Collage)</button>
       <button id="relinkAllBtn" class="btn" title="Ein oder mehrere Collagen ankreuzen (oder keine = alle mit fehlenden Fotos), dann einen übergeordneten Ordner wählen — die App durchsucht ihn komplett, auch alle Unterordner, und verknüpft alles, was sie per Dateiname findet.">🔍 Verknüpfen (mehrere, Ordner durchsuchen)</button>
       <button id="backupBtn" class="btn btn-gold-outline">⬇️ Alle sichern (Backup-Datei)</button>
+      <button id="backupNoPhotosBtn" class="btn btn-gold-outline" title="Nur Projektdaten (Text, Layout, Schriften, Zuschnitte …) ohne die Fotos selbst — winzige Datei, überträgt sich problemlos auf einen anderen Rechner. Fotos musst du danach über „🔗 Verknüpfen“ selbst wieder zuordnen.">⬇️ Nur Projektdaten (ohne Fotos)</button>
       <button id="restoreBtn" class="btn">⬆️ Aus Backup wiederherstellen</button>
       <button id="stripAllBtn" class="btn btn-ghost">🗑️ Alle doppelten Kopien entfernen</button>
       <input id="restoreInput" type="file" accept="application/json,.json" hidden>
@@ -4419,6 +4420,132 @@
     }
   }
 
+  // ---------- Lightweight backup: project data only, no embedded photos ----------
+  // The full backup above always embeds every photo's actual pixel data — for a big photo
+  // library that file can be well over 1 GB, and importing it on another machine is exactly
+  // what was hanging the tab (parsing / base64-decoding that much data at once, not the
+  // fonts). This variant skips every photo's bytes entirely and just writes out the project
+  // structure (layout, text tiles with their fonts/distressing/hidden state, crops, and each
+  // photo tile's filename as a hint) — a tiny, plain-JSON file. On import, photo tiles come
+  // back as ordinary "missing" tiles (exactly like a tile whose file moved), ready to be
+  // reconnected by hand via the existing "🔗 Verknüpfen" flow, which is the manual relinking
+  // the user already prefers over fighting with cross-machine file handles.
+  async function exportProjectDataOnlyBackup(){
+    const db = await openDB();
+    const tx = db.transaction('projects', 'readonly');
+    const records = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('projects').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!records.length){ alert('Noch keine gespeicherten Collagen zum Sichern.'); return; }
+
+    const payload = {
+      app: 'joiner', kind: 'project-data-only', version: 1, exportedAt: Date.now(),
+      projects: records.map(p => ({
+        name: p.name, folder: p.folder || '', savedAt: p.savedAt || 0, color: p.color || null,
+        tiles: (p.tiles || []).map(t => {
+          const base = {
+            id: t.id, type: t.type === 'text' ? 'text' : 'image',
+            x: t.x, y: t.y, w: t.w, h: t.h, rot: t.rot, z: t.z,
+            naturalW: t.naturalW, naturalH: t.naturalH,
+            imgScale: t.imgScale != null ? t.imgScale : null,
+            imgOffsetX: t.imgOffsetX != null ? t.imgOffsetX : null,
+            imgOffsetY: t.imgOffsetY != null ? t.imgOffsetY : null,
+            cuts: t.cuts || null,
+            isMaterial: !!t.isMaterial
+          };
+          if (t.type === 'text'){
+            return Object.assign(base, {
+              text: t.text, fontFamily: t.fontFamily, fontSize: t.fontSize, color: t.color,
+              bold: !!t.bold, italic: !!t.italic, textAlign: t.textAlign,
+              letterSpacing: t.letterSpacing, lineHeight: t.lineHeight,
+              distressStrokes: t.distressStrokes || [], hidden: !!t.hidden
+            });
+          }
+          // photo tile: only the filename survives, as a hint for manual relinking — any
+          // handle/dirId/relPath point at THIS machine's filesystem and would be meaningless
+          // (or actively misleading) once opened somewhere else
+          return Object.assign(base, { filename: t.filename || (t.blob && t.blob.name) || null });
+        })
+      }))
+    };
+    const json = JSON.stringify(payload);
+    const stamp = new Date().toISOString().slice(0,10);
+    const suggestedName = 'joiner-projektdaten-' + stamp + '.json';
+
+    if (window.showSaveFilePicker){
+      let fileHandle;
+      try {
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName, types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+        });
+      } catch(err){ return; } // cancelled
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+    } else {
+      // no streaming needed here (the file is tiny — text only, no embedded images), so the
+      // plain <a download> fallback works everywhere, unlike the full photo backup above
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = suggestedName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    const totalTiles = records.reduce((n,p) => n + (p.tiles ? p.tiles.length : 0), 0);
+    setBackupStatus('✓ Projektdaten gesichert: ' + records.length + ' Projekt(e), ' + totalTiles + ' Kachel(n) — ohne Fotos.');
+  }
+
+  // Sniffs just the first few hundred bytes (never the whole file — that's the point) to tell
+  // a lightweight project-data-only backup apart from the old full-photo streaming format.
+  async function detectBackupKind(file){
+    try {
+      const head = await file.slice(0, 400).text();
+      return head.includes('"kind":"project-data-only"') ? 'project-data-only' : 'legacy-with-photos';
+    } catch(err){ return 'legacy-with-photos'; }
+  }
+
+  // Plain JSON.parse is safe here (unlike the full backup's streaming parser) because this
+  // format never embeds photo bytes — even a project-data-only backup of hundreds of
+  // projects stays well under a few MB of text.
+  async function importProjectDataOnlyBackup(file){
+    let payload;
+    try { payload = JSON.parse(await file.text()); }
+    catch(err){ throw new Error('Datei ist kein gültiges JSON.'); }
+    if (!payload || !Array.isArray(payload.projects)){
+      throw new Error('Unbekanntes Format — keine "projects"-Liste gefunden.');
+    }
+
+    const db = await openDB();
+    let projectCount = 0, tileCount = 0;
+    try {
+      for (const p of payload.projects){
+        // always a fresh id, never reusing anything from the file — an import can only ever
+        // ADD a new project, never touch (let alone overwrite) an existing one
+        const id = 'p' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+        const tiles = (p.tiles || []).map(t => ({ ...t, blob: null, handle: null, dirId: null, relPath: null }));
+        const tx = db.transaction('projects', 'readwrite');
+        tx.objectStore('projects').put({
+          id, name: p.name || 'Importiertes Projekt', folder: p.folder || '',
+          savedAt: p.savedAt || Date.now(), color: p.color || null, dirHandles: [], tiles
+        });
+        await txDone(tx);
+        projectCount++;
+        tileCount += tiles.length;
+        setBackupStatus('Importiere Projektdaten: „' + (p.name || 'Importiertes Projekt') + '“ (' + projectCount + '/' + payload.projects.length + ')');
+        await tick();
+      }
+    } finally {
+      db.close();
+    }
+    if (!projectCount) throw new Error('Datei enthält keine erkennbaren Joiner-Projekte.');
+    return { projectCount, tileCount };
+  }
+
   // ---------- streaming parser for the backup format above ----------
   // Exploits the fixed key order we write with, so instead of a general JSON
   // streaming parser we can match each object's header with a regex and then
@@ -4544,6 +4671,14 @@
     finally { btn.disabled = false; setTimeout(() => setBackupStatus(''), 4000); }
   });
 
+  document.getElementById('backupNoPhotosBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('backupNoPhotosBtn');
+    btn.disabled = true;
+    try { await exportProjectDataOnlyBackup(); }
+    catch(err){ console.error(err); alert('Sichern fehlgeschlagen: ' + err.message); }
+    finally { btn.disabled = false; setTimeout(() => setBackupStatus(''), 4000); }
+  });
+
   const restoreInput = document.getElementById('restoreInput');
   document.getElementById('restoreBtn').addEventListener('click', () => restoreInput.click());
   restoreInput.addEventListener('change', async () => {
@@ -4554,8 +4689,15 @@
     const btn = document.getElementById('restoreBtn');
     btn.disabled = true;
     try {
-      const result = await importProjectsBackup(file);
-      setBackupStatus('✓ Wiederhergestellt: ' + result.projectCount + ' Projekt(e), ' + result.tileCount + ' Foto(s).');
+      // auto-detects which of the two backup formats this file is (only peeks at the first
+      // few hundred bytes to tell, so this stays instant even for a huge legacy photo backup)
+      const kind = await detectBackupKind(file);
+      const result = kind === 'project-data-only'
+        ? await importProjectDataOnlyBackup(file)
+        : await importProjectsBackup(file);
+      setBackupStatus(kind === 'project-data-only'
+        ? '✓ Wiederhergestellt: ' + result.projectCount + ' Projekt(e), ' + result.tileCount + ' Kachel(n) — Fotos bitte über „🔗 Verknüpfen“ zuordnen.'
+        : '✓ Wiederhergestellt: ' + result.projectCount + ' Projekt(e), ' + result.tileCount + ' Foto(s).');
       openLoadModal();
     } catch(err){
       console.error(err);
