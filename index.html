@@ -4587,7 +4587,7 @@
     } catch(err){ return; } // cancelled
 
     const writable = await fileHandle.createWritable();
-    let skipped = 0;
+    let skipped = 0, skippedText = 0;
     try {
       await writable.write('{"app":"joiner","version":1,"exportedAt":' + Date.now() + ',"projects":[');
       for (let pi = 0; pi < records.length; pi++){
@@ -4609,6 +4609,11 @@
         let written = 0;
         for (let ti = 0; ti < tiles.length; ti++){
           const t = tiles[ti];
+          // This format only ever embeds photo pixel data — text tiles (with their fonts,
+          // distressing, hidden state) have no equivalent here and would otherwise silently
+          // vanish with no explanation. Use "⬇️ Nur Projektdaten (ohne Fotos)" instead/as well
+          // to carry text tiles along — it has no such gap.
+          if (t.type === 'text'){ skippedText++; continue; }
           let blob = t.blob || null; // old-style saves already carry the actual photo
           if (!blob && t.dirId != null && dirGrant.get(t.dirId) && t.relPath){
             try { blob = (await resolveFileInDir(dirGrant.get(t.dirId), t.relPath)).file; }
@@ -4645,6 +4650,10 @@
       await writable.write(']}');
       await writable.close();
       setBackupStatus('✓ Backup gespeichert.' + (skipped ? ' (' + skipped + ' Foto(s) übersprungen)' : ''));
+      if (skippedText){
+        alert(skippedText + ' Text-Kachel(n) sind NICHT in diesem Backup enthalten — dieses Format sichert nur Fotos. ' +
+              'Nutze zusätzlich „⬇️ Nur Projektdaten (ohne Fotos)“, um auch Texte (inkl. Schrift, Verwitterung, Ein-/Ausblenden) zu sichern.');
+      }
     } catch(err){
       console.error(err);
       try { await writable.close(); } catch(e2){}
@@ -4790,7 +4799,51 @@
   // find the base64 payload's end via a plain substring search for `"}` —
   // base64 never contains a quote or brace, so that's always safe.
   const PROJECT_HEADER_RE = /^\{"name":((?:"(?:[^"\\]|\\.)*")|null),"savedAt":(-?\d+(?:\.\d+)?),"color":((?:"(?:[^"\\]|\\.)*")|null),"tiles":\[/;
-  const TILE_HEADER_RE = /^\{"id":"((?:[^"\\]|\\.)*)","x":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"y":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"w":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"h":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"rot":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"z":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalW":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalH":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"filename":((?:"(?:[^"\\]|\\.)*")|null),"mime":"((?:[^"\\]|\\.)*)","data":"data:([^;]*);base64,/;
+  // Stops right after "mime" — "cuts" (written right after it, always present, even as null)
+  // is null or an array of cut-shape records that can vary in length/nesting, which a single
+  // fixed regex can't safely bound. Its value is located separately below via balanced-bracket
+  // scanning (findJsonValueEnd), then ",\"data\":\"data:...\";base64," is matched after that.
+  const TILE_HEADER_RE = /^\{"id":"((?:[^"\\]|\\.)*)","x":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"y":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"w":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"h":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"rot":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"z":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalW":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"naturalH":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?),"filename":((?:"(?:[^"\\]|\\.)*")|null),"mime":"((?:[^"\\]|\\.)*)",/;
+  const CUTS_KEY_PREFIX = '"cuts":';
+  const DATA_HEADER_RE = /^,"data":"data:([^;]*);base64,/;
+  // A header (project or tile) is always just a few hundred bytes in well-formed data — if we
+  // haven't matched one after buffering this much, the file's format doesn't match what this
+  // parser expects at all (wrong file, or written by some other/future version). Bail out with a
+  // clear error instead of continuing to pull the ENTIRE rest of a huge file into one string,
+  // which is what used to happen here and could freeze the tab or throw "Invalid string length".
+  const MAX_HEADER_SEARCH_BYTES = 5 * 1024 * 1024;
+  // One embedded photo's base64 payload legitimately can be tens of MB — cap generously so a
+  // genuinely huge single photo still imports, while a truly runaway/malformed scan still stops
+  // well short of exhausting memory or hitting the JS engine's string-length ceiling.
+  const MAX_PAYLOAD_SEARCH_BYTES = 400 * 1024 * 1024;
+
+  // Finds the index just past a JSON value starting at buf[idx] — only needs to handle what this
+  // backup format ever writes for "cuts": null, or a JSON array (of cut-shape objects, which may
+  // themselves nest a "control" point object or be null). Returns -1 if the value isn't complete
+  // yet within the currently-buffered text (caller pulls more and retries), so this works
+  // incrementally just like the rest of this streaming parser.
+  function findJsonValueEnd(buf, idx){
+    if (buf.slice(idx, idx + 4) === 'null') return idx + 4;
+    if (buf[idx] !== '[' && buf[idx] !== '{') return -1; // incomplete, or genuinely unexpected — either way, let the caller pull more and re-check
+    const stack = [buf[idx]];
+    let i = idx + 1, inString = false;
+    while (i < buf.length){
+      const c = buf[i];
+      if (inString){
+        if (c === '\\'){ i += 2; continue; }
+        if (c === '"') inString = false;
+        i++; continue;
+      }
+      if (c === '"'){ inString = true; i++; continue; }
+      if (c === '[' || c === '{') stack.push(c);
+      else if (c === ']' || c === '}'){
+        stack.pop();
+        if (!stack.length) return i + 1;
+      }
+      i++;
+    }
+    return -1; // ran out of buffered text mid-value
+  }
 
   async function* parseBackupStream(file){
     const reader = file.stream().getReader();
@@ -4806,6 +4859,7 @@
     function consume(n){ buf = buf.slice(n); }
 
     while (buf.indexOf('"projects":[') === -1){
+      if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Kein "projects"-Array gefunden — Datei beschädigt oder falsches Format.');
       if (!(await more())) throw new Error('Kein "projects"-Array gefunden — Datei beschädigt oder falsches Format.');
     }
     consume(buf.indexOf('"projects":[') + '"projects":['.length);
@@ -4820,6 +4874,7 @@
 
       let headerMatch;
       while (!(headerMatch = buf.match(PROJECT_HEADER_RE))){
+        if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Projekt-Kopf hat nicht das erwartete Format — Datei beschädigt oder von einer anderen Joiner-Version.');
         if (!(await more())) throw new Error('Projekt-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
       }
       const name = JSON.parse(headerMatch[1]);
@@ -4838,13 +4893,39 @@
 
         let tileMatch;
         while (!(tileMatch = buf.match(TILE_HEADER_RE))){
+          if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Foto-Kopf hat nicht das erwartete Format — Datei beschädigt oder von einer anderen Joiner-Version.');
           if (!(await more())) throw new Error('Foto-Kopf konnte nicht gelesen werden (Datei endet unerwartet).');
         }
-        const [full, id, x, y, w, h, rot, z, naturalW, naturalH, filenameRaw, mime, dataMime] = tileMatch;
+        const [full, id, x, y, w, h, rot, z, naturalW, naturalH, filenameRaw, mime] = tileMatch;
         consume(full.length);
+
+        // "cuts" comes right after "mime" — null, or a JSON array of cut-shape records. Its
+        // value can't be captured by the fixed header regex above (unbounded length/shape), so
+        // it's located here via balanced-bracket scanning instead.
+        while (buf.length < CUTS_KEY_PREFIX.length || buf.slice(0, CUTS_KEY_PREFIX.length) !== CUTS_KEY_PREFIX){
+          if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Zuschnitt-Daten hat nicht das erwartete Format — Datei beschädigt oder von einer anderen Joiner-Version.');
+          if (!(await more())) throw new Error('Zuschnitt-Daten nicht gefunden (Datei endet unerwartet).');
+        }
+        let cutsEnd;
+        while ((cutsEnd = findJsonValueEnd(buf, CUTS_KEY_PREFIX.length)) === -1){
+          if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Zuschnitt-Daten sind ungewöhnlich groß oder beschädigt.');
+          if (!(await more())) throw new Error('Zuschnitt-Daten unvollständig (Datei endet unerwartet).');
+        }
+        let cuts = null;
+        try { cuts = JSON.parse(buf.slice(CUTS_KEY_PREFIX.length, cutsEnd)); } catch(err){ cuts = null; }
+        consume(cutsEnd);
+
+        let dataHeaderMatch;
+        while (!(dataHeaderMatch = buf.match(DATA_HEADER_RE))){
+          if (buf.length > MAX_HEADER_SEARCH_BYTES) throw new Error('Bild-Daten-Kopf hat nicht das erwartete Format — Datei beschädigt oder von einer anderen Joiner-Version.');
+          if (!(await more())) throw new Error('Bild-Daten-Kopf nicht gefunden (Datei endet unerwartet).');
+        }
+        const dataMime = dataHeaderMatch[1];
+        consume(dataHeaderMatch[0].length);
 
         let closeIdx;
         while ((closeIdx = buf.indexOf('"}')) === -1){
+          if (buf.length > MAX_PAYLOAD_SEARCH_BYTES) throw new Error('Foto-Daten sind ungewöhnlich groß oder beschädigt.');
           if (!(await more())) throw new Error('Foto-Daten unvollständig (Datei endet unerwartet).');
         }
         const base64 = buf.slice(0, closeIdx);
@@ -4854,7 +4935,7 @@
           type: 'tile',
           meta: { id, x:Number(x), y:Number(y), w:Number(w), h:Number(h), rot:Number(rot), z:Number(z),
                   naturalW:Number(naturalW), naturalH:Number(naturalH),
-                  filename: JSON.parse(filenameRaw), mime: dataMime || mime },
+                  filename: JSON.parse(filenameRaw), mime: dataMime || mime, cuts },
           base64
         };
       }
@@ -4880,7 +4961,8 @@
           currentProject.tiles.push({ id: evt.meta.id, blob: namedFile, filename: namedFile.name,
                                        x: evt.meta.x, y: evt.meta.y, w: evt.meta.w, h: evt.meta.h,
                                        rot: evt.meta.rot, z: evt.meta.z,
-                                       naturalW: evt.meta.naturalW, naturalH: evt.meta.naturalH });
+                                       naturalW: evt.meta.naturalW, naturalH: evt.meta.naturalH,
+                                       cuts: evt.meta.cuts || null });
           tileCount++;
           setBackupStatus('Stelle wieder her: „' + currentProject.name + '“ — Foto ' + currentProject.tiles.length + ' (insgesamt ' + tileCount + ')');
           await tick();
